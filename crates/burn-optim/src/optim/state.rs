@@ -139,6 +139,8 @@ impl RecordState for () {
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec;
+
     use super::*;
     use burn::tensor::Tensor;
     use burn_core as burn;

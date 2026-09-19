@@ -1,3 +1,6 @@
+use alloc::string::ToString;
+#[cfg(test)]
+use alloc::vec;
 use alloc::vec::Vec;
 use burn_core as burn;
 

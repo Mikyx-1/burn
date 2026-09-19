@@ -382,11 +382,12 @@ pub(crate) fn handle_command(
             // macros directly in test modules, so they only compile under std.
             // The build step (`xtask build --no-std`) still validates that
             // the crate itself compiles as no_std via `cargo build`, which
-            // does not pull in test modules.
+            // does not pull in test modules. burn-optim tests also require an
+            // execution backend, which no-default-features intentionally omits.
             let no_std_test_crates: Vec<&str> = NO_STD_CRATES
                 .iter()
                 .copied()
-                .filter(|&c| c != "burn-flex")
+                .filter(|&c| c != "burn-flex" && c != "burn-optim")
                 .collect();
             ["Default"].iter().try_for_each(|test_target| {
                 let mut test_args = vec!["--no-default-features"];
@@ -401,6 +402,20 @@ pub(crate) fn handle_command(
                     "no-std",
                 )
             })?;
+
+            // Optimizer tests execute tensor operations, so run them with a no_std-compatible
+            // backend while keeping the optimizer crate default features disabled.
+            build_helpers::custom_crates_tests(
+                vec!["burn-optim"],
+                handle_test_args(
+                    &["--no-default-features", "--features", "burn-core/flex"],
+                    args.release,
+                ),
+                None,
+                None,
+                "no-std with Flex backend",
+            )?;
+
             handle_backend_tests(
                 args.clone().try_into().unwrap(),
                 TestBackend::Ndarray,
