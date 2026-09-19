@@ -1,6 +1,6 @@
 # MNIST Inference on Web
 
-[![Live Demo](https://img.shields.io/badge/live-demo-brightgreen)](https://burn.dev/demo)
+[![Live Demo](https://img.shields.io/badge/live-demo-brightgreen)](https://burn.dev/)
 
 This crate demonstrates how to run an MNIST-trained model in the browser for inference.
 
@@ -89,4 +89,4 @@ code was copied but helped tremendously with an implementation approach).
 ## Resources
 
 1. [Rust 🦀 and WebAssembly](https://rustwasm.github.io/docs/book/)
-2. [wasm-bindgen](https://rustwasm.github.io/wasm-bindgen/)
+2. [wasm-bindgen](https://wasm-bindgen.github.io/wasm-bindgen/)

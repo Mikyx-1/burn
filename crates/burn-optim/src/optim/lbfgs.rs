@@ -516,7 +516,7 @@ impl Default for LBFGSState {
 
 /// L-BFGS optimizer.
 ///
-/// Ported from [pytorch](https://github.com/pytorch/pytorch/torch/optim/lbfgs.py). Heavily inspired by [miniFunc](https://www.cs.ubc.ca/~schmidtm/Software/minFunc.html)
+/// Ported from [pytorch](https://github.com/pytorch/pytorch/blob/main/torch/optim/lbfgs.py). Heavily inspired by [miniFunc](https://www.cs.ubc.ca/~schmidtm/Software/minFunc.html)
 ///
 /// See also:
 /// - [L-BFGS](https://en.wikipedia.org/wiki/Limited-memory_BFGS)

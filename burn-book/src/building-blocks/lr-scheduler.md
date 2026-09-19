@@ -13,7 +13,7 @@ float. We currently offer the following schedulers.
 | Exponential      | Multiply the learning rate by a constant factor at every step                      |
 | Noam             | Warm up linearly, then decay proportionally to the inverse square root of the step |
 | Step             | Multiply the learning rate by a constant factor at fixed intervals                 |
-| Composed         | Combine schedulers per parameter group (see the [learner section](./learner.md#multiple-optimizers)) |
+| Composed         | Combine schedulers per parameter group (see the [learner section](./learner.md#parameter-groups)) |
 | Sequential       | Run different schedulers during non-overlapping parts of training                  |
 
 ## Sequential learning rate schedules

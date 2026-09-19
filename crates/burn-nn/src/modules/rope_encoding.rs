@@ -448,7 +448,7 @@ mod tests {
     }
 
     fn apply_freq_scaling_by_parts(freqs: Tensor<1>) -> Tensor<1> {
-        // Adapted from: https://github.com/meta-llama/llama-models/blob/main/models/llama3/reference_impl/model.py#L45
+        // Adapted from: https://github.com/meta-llama/llama-models/blob/main/models/llama3/model.py#L45-L63
         let scale_factor = 8.;
         let low_freq_factor = 1.;
         let high_freq_factor = 4.;

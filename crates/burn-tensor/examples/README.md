@@ -23,7 +23,11 @@ left-to-right contraction stages. `Tensor::einsum` accepts runtime strings.
 Both use the same parser and executor and support broadcasting, ellipses,
 diagonals, and multiple operands. Scalar tensors use shape `[1]`.
 
-The executor follows the [Python reference](https://github.com/Mikyx-1/pytorch-einsum-reference).
-It uses existing Burn operations and does not search for an optimized contraction
-order. Float and Int operands must share their dtype and device; quantized
-operands are unsupported.
+The equation syntax follows the conventions documented by
+[PyTorch](https://docs.pytorch.org/docs/stable/generated/torch.einsum.html) and
+[NumPy](https://numpy.org/doc/stable/reference/generated/numpy.einsum.html).
+Burn contracts operands from left to right and does not search for an optimized contraction
+order. Scalar results use shape `[1]`; quantized operands are unsupported; and Float or Int
+operands must share their dtype and device. See the
+[implementation](../src/tensor/api/einsum/) and [tests](../tests/einsum_macros.rs) for details and
+coverage.

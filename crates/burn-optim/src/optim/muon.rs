@@ -120,7 +120,7 @@ impl AdjustLrFn {
 ///
 /// - [Muon: An optimizer for hidden layers in neural networks](https://kellerjordan.github.io/posts/muon/)
 /// - [Muon is Scalable for LLM Training](https://arxiv.org/pdf/2502.16982)
-/// - [PyTorch Implementation](https://github.com/pytorch/pytorch/blob/main/torch/optim/muon.py)
+/// - [PyTorch Implementation](https://github.com/pytorch/pytorch/blob/main/torch/optim/_muon.py)
 /// - [Original Implementation](https://github.com/KellerJordan/Muon)
 #[derive(Config, Debug)]
 pub struct MuonConfig {
@@ -301,7 +301,7 @@ impl Muon {
     /// # References
     ///
     /// - Original: https://github.com/KellerJordan/Muon/blob/master/muon.py
-    /// - PyTorch: https://github.com/pytorch/pytorch/blob/main/torch/optim/muon.py
+    /// - PyTorch: https://github.com/pytorch/pytorch/blob/main/torch/optim/_muon.py
     fn zeropower_via_newtonschulz<const D: usize>(&self, g: Tensor<D>) -> Tensor<D> {
         let shape = g.shape();
         let dim_m2 = shape[D - 2];

@@ -17,7 +17,7 @@ pub fn start() {
 }
 
 /// Mnist structure that corresponds to JavaScript class.
-/// See:[exporting-rust-struct](https://rustwasm.github.io/wasm-bindgen/contributing/design/exporting-rust-struct.html)
+/// See:[exporting-rust-struct](https://wasm-bindgen.github.io/wasm-bindgen/contributing/design/exporting-rust-struct.html)
 #[cfg_attr(target_family = "wasm", wasm_bindgen)]
 pub struct Mnist {
     model: Option<Model>,
@@ -41,8 +41,8 @@ impl Mnist {
     /// * `input` - A f32 slice of input 28x28 image
     ///
     /// See bindgen support types for passing and returning arrays:
-    /// * [number-slices](https://rustwasm.github.io/wasm-bindgen/reference/types/number-slices.html)
-    /// * [boxed-number-slices](https://rustwasm.github.io/wasm-bindgen/reference/types/boxed-number-slices.html)
+    /// * [number-slices](https://wasm-bindgen.github.io/wasm-bindgen/reference/types/number-slices.html)
+    /// * [boxed-number-slices](https://wasm-bindgen.github.io/wasm-bindgen/reference/types/boxed-number-slices.html)
     ///
     pub async fn inference(&mut self, input: &[f32]) -> Result<Array, String> {
         if self.model.is_none() {
