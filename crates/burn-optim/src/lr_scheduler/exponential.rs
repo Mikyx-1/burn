@@ -22,8 +22,14 @@ pub struct ExponentialLrSchedulerConfig {
 impl ExponentialLrSchedulerConfig {
     /// Initializes a [exponential learning rate scheduler](ExponentialLrScheduler).
     pub(crate) fn build(&self) -> Result<ExponentialLrScheduler, String> {
+        if !self.initial_lr.is_finite() {
+            return Err("Initial learning rate must be finite".into());
+        }
         if self.initial_lr <= 0. || self.initial_lr > 1. {
             return Err("Initial learning rate must be greater than 0 and at most 1".into());
+        }
+        if !self.gamma.is_finite() {
+            return Err("Gamma must be finite".into());
         }
         if self.gamma <= 0. || self.gamma > 1. {
             return Err("Gamma must be greater than 0 and at most 1".into());
@@ -149,5 +155,24 @@ mod tests {
             .build()
             .unwrap();
         test_utils::check_save_load(scheduler, 7);
+    }
+
+    #[test]
+    fn config_rejects_non_finite_parameters() {
+        for initial_lr in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let error = ExponentialLrSchedulerConfig::new(initial_lr, 0.5)
+                .build()
+                .err()
+                .unwrap();
+            assert_eq!(error, "Initial learning rate must be finite");
+        }
+
+        for gamma in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let error = ExponentialLrSchedulerConfig::new(0.5, gamma)
+                .build()
+                .err()
+                .unwrap();
+            assert_eq!(error, "Gamma must be finite");
+        }
     }
 }
