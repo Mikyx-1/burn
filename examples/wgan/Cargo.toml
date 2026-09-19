@@ -1,6 +1,8 @@
 [package]
 name = "wgan"
 version = "0.22.0-pre.3"
+license.workspace = true
+publish = false
 edition.workspace = true
 
 [lints]

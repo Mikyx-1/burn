@@ -2,6 +2,8 @@
 edition.workspace = true
 name = "modern-lstm"
 version = "0.22.0-pre.3"
+license.workspace = true
+publish = false
 
 [lints]
 workspace = true
