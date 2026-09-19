@@ -92,10 +92,13 @@ fn test_nonzero_3d() {
 
 #[test]
 fn test_nonzero_empty() {
-    let tensor = TestTensorBool::<1>::from([false, false, false, false, false]);
+    let tensor = TestTensorBool::<2>::from([[false, false, false], [false, false, false]]);
     let output = tensor.nonzero();
 
-    assert_eq!(output.len(), 0);
+    assert_eq!(output.len(), 2);
+    for indices in output {
+        assert_eq!(indices.shape(), Shape::new([0]));
+    }
 }
 
 #[test]
