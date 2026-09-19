@@ -3,7 +3,7 @@ use std::error::Error;
 use std::{marker::PhantomData, sync::Arc};
 
 /// Only use a fraction of an existing dataset lazily.
-#[derive(new, Clone)]
+#[derive(Clone)]
 pub struct PartialDataset<D, I> {
     dataset: D,
     start_index: usize,
@@ -11,12 +11,53 @@ pub struct PartialDataset<D, I> {
     input: PhantomData<I>,
 }
 
+impl<D, I> PartialDataset<D, I> {
+    /// Creates a partial view bounded by the source dataset.
+    ///
+    /// An end past the source length is clamped. A start past the source length
+    /// produces an empty view.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `start_index` is greater than `end_index`.
+    pub fn new<E>(dataset: D, start_index: usize, end_index: usize) -> Self
+    where
+        D: Dataset<I, E>,
+        E: Error + Send + Sync + 'static,
+    {
+        assert!(
+            start_index <= end_index,
+            "PartialDataset start index must not exceed its end index"
+        );
+
+        let len = dataset.len();
+        let start_index = start_index.min(len);
+        let end_index = end_index.min(len);
+
+        Self {
+            dataset,
+            start_index,
+            end_index,
+            input: PhantomData,
+        }
+    }
+}
+
 impl<D, I> PartialDataset<D, I>
 where
     D: Dataset<I>,
 {
     /// Splits a dataset into multiple partial datasets.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `num` is zero.
     pub fn split(dataset: D, num: usize) -> Vec<PartialDataset<Arc<D>, I>> {
+        assert!(
+            num > 0,
+            "The number of dataset splits must be greater than zero"
+        );
+
         let dataset = Arc::new(dataset); // cheap cloning.
 
         let mut current = 0;
@@ -42,11 +83,21 @@ where
     }
 
     /// Splits a dataset by distributing complete chunks/batches across multiple partial datasets.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `num` or `batch_size` is zero.
     pub fn split_chunks(
         dataset: D,
         num: usize,
         batch_size: usize,
     ) -> Vec<PartialDataset<Arc<D>, I>> {
+        assert!(
+            num > 0,
+            "The number of dataset splits must be greater than zero"
+        );
+        assert!(batch_size > 0, "The batch size must be greater than zero");
+
         let dataset = Arc::new(dataset); // cheap cloning.
         let total_items = dataset.len();
 
@@ -260,5 +311,47 @@ mod tests {
         }
 
         assert_eq!(items_original, items_partial);
+    }
+
+    #[test]
+    fn constructor_clamps_end_to_source_length() {
+        let dataset = FakeDataset::<String>::new(10);
+        let partial: PartialDataset<_, String> = PartialDataset::new(dataset, 5, 100);
+        assert_eq!(partial.len(), 5);
+    }
+
+    #[test]
+    fn constructor_clamps_start_past_source_to_empty() {
+        let dataset = FakeDataset::<String>::new(10);
+        let partial: PartialDataset<_, String> = PartialDataset::new(dataset, 20, 30);
+        assert_eq!(partial.len(), 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "start index must not exceed its end index")]
+    fn constructor_rejects_reversed_range() {
+        let dataset = FakeDataset::<String>::new(10);
+        let _: PartialDataset<_, String> = PartialDataset::new(dataset, 6, 5);
+    }
+
+    #[test]
+    #[should_panic(expected = "number of dataset splits must be greater than zero")]
+    fn split_rejects_zero_parts() {
+        let dataset = FakeDataset::<String>::new(10);
+        let _ = PartialDataset::<_, String>::split(dataset, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "number of dataset splits must be greater than zero")]
+    fn split_chunks_rejects_zero_parts() {
+        let dataset = FakeDataset::<String>::new(10);
+        let _ = PartialDataset::<_, String>::split_chunks(dataset, 0, 2);
+    }
+
+    #[test]
+    #[should_panic(expected = "batch size must be greater than zero")]
+    fn split_chunks_rejects_zero_batch_size() {
+        let dataset = FakeDataset::<String>::new(10);
+        let _ = PartialDataset::<_, String>::split_chunks(dataset, 2, 0);
     }
 }
