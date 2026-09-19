@@ -130,7 +130,7 @@ impl CrossEntropyLoss {
     pub fn forward(&self, logits: Tensor<2>, targets: Tensor<1, Int>) -> Tensor<1> {
         Self::assertions(logits.clone(), targets.clone());
         match self.smoothing {
-            Some(alpha) => self.forward_smoothed(logits, targets, alpha),
+            Some(alpha) if alpha > 0.0 => self.forward_smoothed(logits, targets, alpha),
             _ => self.forward_default(logits, targets),
         }
     }
@@ -383,6 +383,69 @@ mod tests {
         loss_1
             .into_data()
             .assert_approx_eq::<FT>(&loss_2.into_data(), Tolerance::default());
+    }
+
+    #[test]
+    fn zero_smoothing_matches_default_for_exact_zero_probabilities() {
+        let device = Default::default();
+        let probabilities = Tensor::<2>::from_data(
+            TensorData::from([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]),
+            &device,
+        );
+        let targets = Tensor::<1, Int>::from_data(TensorData::from([0, 1]), &device);
+
+        let expected = CrossEntropyLossConfig::new()
+            .with_logits(false)
+            .init(&device)
+            .forward(probabilities.clone(), targets.clone())
+            .into_scalar::<FT>();
+        let actual = CrossEntropyLossConfig::new()
+            .with_logits(false)
+            .with_smoothing(Some(0.0))
+            .init(&device)
+            .forward(probabilities, targets)
+            .into_scalar::<FT>();
+
+        assert!(actual.is_finite());
+        assert_eq!(actual, expected);
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn zero_smoothing_matches_default_gradients_for_exact_zero_probabilities() {
+        let device = Device::default().autodiff();
+        let targets = Tensor::<1, Int>::from_data(TensorData::from([0, 1]), &device);
+        let probabilities_default = Tensor::<2>::from_data(
+            TensorData::from([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]),
+            &device,
+        )
+        .require_grad();
+        let probabilities_zero_smoothing = Tensor::<2>::from_data(
+            TensorData::from([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]),
+            &device,
+        )
+        .require_grad();
+
+        let loss_default = CrossEntropyLossConfig::new()
+            .with_logits(false)
+            .init(&device)
+            .forward(probabilities_default.clone(), targets.clone());
+        let loss_zero_smoothing = CrossEntropyLossConfig::new()
+            .with_logits(false)
+            .with_smoothing(Some(0.0))
+            .init(&device)
+            .forward(probabilities_zero_smoothing.clone(), targets);
+
+        let grads_default = loss_default.backward();
+        let grads_zero_smoothing = loss_zero_smoothing.backward();
+        let grad_default = probabilities_default.grad(&grads_default).unwrap();
+        let grad_zero_smoothing = probabilities_zero_smoothing
+            .grad(&grads_zero_smoothing)
+            .unwrap();
+
+        grad_zero_smoothing
+            .into_data()
+            .assert_approx_eq::<FT>(&grad_default.into_data(), Tolerance::default());
     }
 
     #[test]
