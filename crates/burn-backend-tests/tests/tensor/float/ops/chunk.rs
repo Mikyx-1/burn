@@ -79,6 +79,32 @@ fn test_chunk_not_divisible() {
 }
 
 #[test]
+fn test_chunk_uneven_can_return_fewer_chunks() {
+    let tensors = TestTensorInt::arange(0..5, &Default::default())
+        .float()
+        .chunk(4, 0);
+
+    assert_eq!(tensors.len(), 3);
+    let expected = [
+        TensorData::from([0, 1]),
+        TensorData::from([2, 3]),
+        TensorData::from([4]),
+    ];
+
+    for (tensor, expected) in tensors.iter().zip(expected.iter()) {
+        tensor.to_data().assert_eq(expected, false);
+    }
+}
+
+#[test]
+#[should_panic(expected = "The number of chunks must be greater than zero")]
+fn test_chunk_rejects_zero_chunks() {
+    let tensor = TestTensorInt::arange(0..5, &Default::default()).float();
+
+    let _ = tensor.chunk(0, 0);
+}
+
+#[test]
 #[should_panic(expected = "=== Tensor Operation Error ===")]
 fn test_invalid_dim() {
     let _tensors = TestTensorInt::arange(0..12, &Default::default()).chunk(6, 1);
