@@ -132,8 +132,9 @@ macro_rules! module {
 /// Trait for all neural network modules.
 ///
 /// Modules should be created using the [derive](burn_derive::Module) attribute.
-/// This will make your module trainable, savable and loadable via
-/// `state` and `load`.
+/// This makes a module trainable and provides parameter persistence through
+/// [`into_record`](Module::into_record), [`load_record`](Module::load_record),
+/// [`save_file`](Module::save_file), and [`load_file`](Module::load_file).
 ///
 /// # Example
 ///
@@ -157,11 +158,11 @@ macro_rules! module {
 /// not a guarantee that a value currently has autodiff enabled. Inspect individual parameter
 /// tensors with [`Tensor::is_autodiff`] and [`Tensor::is_require_grad`]; contexts can be mixed.
 pub trait Module: Clone + Send + core::fmt::Debug {
-    /// Return all the devices found in the underneath module tree added to the given vector
+    /// Return all the devices found in the underlying module tree added to the given vector
     /// without duplicates.
     fn collect_devices(&self, devices: Devices) -> Devices;
 
-    /// Return all the devices found in the underneath module tree without duplicates.
+    /// Return all the devices found in the underlying module tree without duplicates.
     fn devices(&self) -> Devices {
         self.collect_devices(Devices::new())
     }
@@ -265,7 +266,7 @@ pub trait Module: Clone + Send + core::fmt::Debug {
     ///
     /// # Warnings
     ///
-    /// Use [`valid`](Module::valid) for inference. `freeze` is intended for partial finetuning
+    /// Use [`valid`](Module::valid) for inference. `freeze` is intended for partial fine-tuning
     /// where a module remains on the training
     /// device but should not participate in training.
     fn freeze(self) -> Self {
@@ -375,7 +376,10 @@ pub trait Module: Clone + Send + core::fmt::Debug {
     /// after validation.
     fn valid(&self) -> Self;
 
-    /// Get the number of parameters the module has, including all of its sub-modules.
+    /// Return the total number of scalar elements in the module's floating-point parameters.
+    ///
+    /// This includes parameters in submodules and attached reparameterizations. It counts tensor
+    /// elements, not parameter tensors.
     fn num_params(&self) -> usize {
         module!(
             visit_float = self,
@@ -460,7 +464,8 @@ pub trait Module: Clone + Send + core::fmt::Debug {
         crate::store::ModuleRecord::from_module(self, None)
     }
 
-    /// Collect the tensor parameters `group` names into a [`ModuleRecord`](crate::store::ModuleRecord).
+    /// Collect the tensor parameters matched by `group` into a
+    /// [`ModuleRecord`](crate::store::ModuleRecord).
     ///
     /// The record of a part of the module rather than all of it — what a run that trained a
     /// group writes when the rest of the module is the checkpoint it started from, and what
@@ -480,8 +485,8 @@ pub trait Module: Clone + Send + core::fmt::Debug {
     /// Apply a [`ModuleRecord`](crate::store::ModuleRecord) to this module, returning the loaded
     /// module.
     ///
-    /// Honors the record's [`DTypePolicy`](crate::store::DTypePolicy), `validate`, and
-    /// `allow_partial` settings.
+    /// Honors the record's [`DTypePolicy`](crate::store::DTypePolicy), `validate`,
+    /// `allow_partial`, and `allow_unused` settings.
     fn try_load_record(
         self,
         record: crate::store::ModuleRecord,
@@ -508,7 +513,7 @@ pub trait Module: Clone + Send + core::fmt::Debug {
     ///
     /// Convenience for [`into_record`](Module::into_record) followed by
     /// [`ModuleRecord::save`](crate::store::ModuleRecord::save). For non-default load behavior
-    /// (dtype policy, partial loading, validation), go through the record directly.
+    /// (dtype policy, partial or unused entries, validation), go through the record directly.
     #[cfg(feature = "std")]
     fn save_file<P: AsRef<std::path::Path>>(self, path: P) -> Result<(), crate::store::RecordError>
     where
@@ -521,8 +526,8 @@ pub trait Module: Clone + Send + core::fmt::Debug {
     ///
     /// Uses the default load behavior. Panics on I/O or validation errors; use
     /// [`try_load_file`](Module::try_load_file) for the fallible variant, or go through
-    /// [`ModuleRecord`](crate::store::ModuleRecord) to configure dtype policy, partial loading or
-    /// validation.
+    /// [`ModuleRecord`](crate::store::ModuleRecord) to configure dtype policy, partial or unused
+    /// entries, or validation.
     #[cfg(feature = "std")]
     fn load_file<P: AsRef<std::path::Path>>(self, path: P) -> Self
     where

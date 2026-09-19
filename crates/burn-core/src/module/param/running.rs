@@ -34,11 +34,11 @@ mod threading {
 // Re-export items from the disabled/enabled blocks
 use threading::*;
 
-/// A state that can be updated during the forward pass while being thread safe.
+/// A state that can be updated during the forward pass while remaining thread-safe.
 ///
-/// # Note
+/// # Synchronization
 ///
-/// The state value is the average of all updates on all threads.
+/// At synchronization, the pending per-thread values are averaged to replace the current value.
 #[derive(Clone, Debug)]
 pub struct RunningState<V> {
     id: ParamId,
@@ -165,22 +165,19 @@ impl<const D: usize> RunningState<Tensor<D>> {
         map.insert(thread_id, value);
     }
 
-    /// Get the current value,
+    /// Get the current value without synchronizing pending updates.
     ///
-    /// # Note
-    ///
-    /// The current value might be outdated by one update.
+    /// The returned value may lag behind the most recent pending update on each thread.
     pub fn value(&self) -> Tensor<D> {
         let value = self.value.lock();
         value.clone()
     }
 
-    /// Get the current value and make sure it is sync.
+    /// Get the current value, synchronizing when the current thread has a pending update.
     ///
-    /// # Note
-    ///
-    /// Don't use this function after an update on the same thread where other threads might have to
-    /// register their update before the actual synchronization needs to happen.
+    /// This is not a thread barrier. When the calling thread has a pending value, all values queued
+    /// at that point are averaged. If only other threads have pending values, this method currently
+    /// leaves them pending.
     pub fn value_sync(&self) -> Tensor<D> {
         let thread_id = get_thread_current_id();
         let mut map = self.values.lock();

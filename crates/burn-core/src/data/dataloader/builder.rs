@@ -43,9 +43,9 @@ where
         }
     }
 
-    /// Sets the batch size to a fix number.
+    /// Sets the batch size to a fixed number.
     ///
-    /// The [fix batch strategy](FixBatchStrategy) will be used.
+    /// The [fixed-batch strategy](FixBatchStrategy) will be used.
     ///
     /// # Arguments
     ///
@@ -77,11 +77,11 @@ where
 
     /// Sets the number of workers.
     ///
-    /// - `Some(0)` or `None`: the dataloader will run without work threads.
-    /// - `Some(n); n > 0`: the dataloader will run with `n` background threads.
+    /// - Calling `num_workers(0)`, or leaving it unset, loads data on the calling thread.
+    /// - Calling `num_workers(n)` with `n > 0` loads data on `n` background worker threads.
     ///
-    /// A 1-worker threaded dataloader will run loads in a background thread,
-    /// while a 0-worker threaded dataloader will run loads in the main thread.
+    /// A one-worker data loader runs loads in a background thread, while a zero-worker data loader
+    /// runs them on the calling thread.
     ///
     /// # Arguments
     ///

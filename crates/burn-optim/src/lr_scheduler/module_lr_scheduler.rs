@@ -41,7 +41,7 @@ impl ModuleLearningRate {
             .expect("Should match at least one parameter group.")
     }
 
-    /// Get the base learning rate value which's group matches all parameters.
+    /// Get the base learning rate, whose group matches all parameters.
     pub fn base(&self) -> LearningRate {
         self.groups
             .first()
@@ -127,7 +127,7 @@ impl ModuleLrScheduler {
         }
     }
 
-    /// Perform the scheduler step of every scheduler and returns the effective learning rate policy.
+    /// Advance every scheduler and return the effective learning-rate policy.
     pub fn step(&mut self) -> ModuleLearningRate {
         let groups = self
             .groups

@@ -6,7 +6,7 @@ use super::{LrScheduler, LrSchedulerRecord, String};
 use crate::lr_scheduler::module_lr_scheduler::ModuleLrScheduler;
 use crate::{LearningRate, RecordState};
 
-/// The configuration for create a [step learning rate scheduler](StepLrScheduler).
+/// The configuration for creating a [step learning rate scheduler](StepLrScheduler).
 ///
 /// This scheduler returns the learning rate `initial_lr` from the start, and keeps doing so until
 /// the same value has been given for `step_size` times. Then it multiplies the learning rate by

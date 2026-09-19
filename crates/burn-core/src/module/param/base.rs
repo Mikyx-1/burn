@@ -107,9 +107,12 @@ impl<T: ParameterValue> LazyInitState<T> {
 ///
 /// # Cloning
 ///
-/// Cloning a parameter is always cheap; it never allocates or initializes tensors.
-/// Clones share the same lazy initialization state, so initialization happens at most once and
-/// all clones resolve to the same value regardless of which one triggered it.
+/// Cloning a parameter never initializes its tensors. Clones share the same lazy initialization
+/// state, so initialization happens at most once and all clones resolve to the same value regardless
+/// of which one triggered it.
+///
+/// Without an attached reparameterization, cloning is a cheap shared-state clone. An attached
+/// reparameterization is cloned as well, and cloning its type-erased box may allocate.
 ///
 /// This sharing is strictly scoped to lazy initialization. It only guarantees that all clones
 /// observe the same initialization result. Subsequent transformations operate on independent
@@ -328,12 +331,16 @@ impl<T: ParameterValue> Param<T> {
         self.state.value.get().is_some()
     }
 
-    /// Gets the parameter's value while consuming the parameter.
+    /// Gets the raw stored value while consuming the parameter.
+    ///
+    /// This does not materialize the effective value of an attached reparameterization. The
+    /// reparameterization is discarded; use [`val`](Self::val) before consuming when the effective
+    /// value is required.
     pub fn into_value(self) -> T {
         self.consume().1
     }
 
-    /// Gets the parameter id and raw value while consuming the parameter.
+    /// Gets the parameter ID, raw stored value, and [`ParamMapper`] while consuming the parameter.
     ///
     /// Any attached reparameterization is dropped. During module traversal,
     /// `Param<Tensor<D>>::map` detaches the reparameterization before calling

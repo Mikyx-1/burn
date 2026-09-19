@@ -10,10 +10,10 @@ use burn_std::id::ParamId;
 use burn_std::sync::Arc;
 use burn_tensor::{Bool, Int, Tensor};
 
-/// Errors tied to [ParamGroup]'s.
+/// Errors produced by [`ParamGroup`].
 #[derive(Debug)]
 pub enum ParamGroupError {
-    /// Use of an invalid Regex pattern.
+    /// Use of an invalid regex pattern.
     InvalidPatternError(String),
 }
 
@@ -48,7 +48,7 @@ impl ModuleVisitor for ParamIdCollector {
     }
 }
 
-/// A way to represent a group of parameter for a Burn module.
+/// A way to represent a group of parameters for a Burn module.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ParamGroup {
     matcher: ParamGroupMatcher,
@@ -79,12 +79,12 @@ impl ParamGroup {
         }
     }
 
-    /// Matches parameters by exact text path (e.g., "model.backbone.linear.weight")
+    /// Matches parameters by an exact text path (e.g., "model.backbone.linear.weight").
     pub fn from_path(path: impl Into<String>) -> Self {
         ParamGroup::from_paths(vec![path])
     }
 
-    /// Matches parameters by exact text paths (e.g., "model.backbone.linear.weight", etc.)
+    /// Matches parameters by exact text paths (e.g., "model.backbone.linear.weight").
     pub fn from_paths(paths: Vec<impl Into<String>>) -> Self {
         Self {
             matcher: ParamGroupMatcher::Path(Arc::new(PathMatcher::Exact(
@@ -94,13 +94,14 @@ impl ParamGroup {
         }
     }
 
-    /// Matches parameters that include the predicate in their paths (e.g., "backbone")
+    /// Matches parameters that include the predicate in their paths (e.g., "backbone").
     pub fn from_predicate(path: impl Into<String>) -> Self {
         ParamGroup::from_predicates(vec![path])
     }
 
-    /// Matches parameters that include all the predicates in their path (AND logic).
-    /// (e.g., parameter path contains "backbone" and "linear")
+    /// Matches parameters whose paths include all predicates (AND logic).
+    ///
+    /// For example, a path can be required to contain both "backbone" and "linear".
     pub fn from_predicates(paths: Vec<impl Into<String>>) -> Self {
         Self {
             matcher: ParamGroupMatcher::Path(Arc::new(PathMatcher::Include(
@@ -110,8 +111,9 @@ impl ParamGroup {
         }
     }
 
-    /// Matches parameters that include any of the predicates in their path (OR logic).
-    /// (e.g., parameter path contains "backbone" or "linear")
+    /// Matches parameters whose paths include any predicate (OR logic).
+    ///
+    /// For example, a path can contain either "backbone" or "linear".
     pub fn from_any_predicates(paths: Vec<impl Into<String>>) -> Self {
         let mut matchers: Vec<ParamGroupMatcher> = paths
             .into_iter()
@@ -137,20 +139,23 @@ impl ParamGroup {
     }
 
     #[cfg(feature = "std")]
-    /// Matches parameters by regex pattern (e.g., "^model\.layer\.\d+$")
+    /// Matches parameters by a regex pattern (for example, `^model\.layer\.\d+$`).
     ///
     /// # Errors
-    /// Returns a [ParamGroupError::InvalidPatternError] if the string cannot be compiled into a valid regex.
+    ///
+    /// Returns [`ParamGroupError::InvalidPatternError`] if the string is not a valid regex.
     pub fn from_regex<S: AsRef<str>>(pattern: S) -> Result<Self, ParamGroupError> {
         ParamGroup::from_regexes(vec![pattern])
     }
 
     #[cfg(feature = "std")]
-    /// Matches parameters for all the regex patterns (AND logic).
-    /// (e.g., "^encoder\.layer\.\d+", and "bias$" )
+    /// Matches parameters satisfying all regex patterns (AND logic).
+    ///
+    /// For example, a path can be required to match both `^encoder\.layer\.\d+` and `bias$`.
     ///
     /// # Errors
-    /// Returns a [ParamGroupError::InvalidPatternError] if the strings cannot be compiled into a valid regex.
+    ///
+    /// Returns [`ParamGroupError::InvalidPatternError`] if any string is not a valid regex.
     pub fn from_regexes<S: AsRef<str>>(patterns: Vec<S>) -> Result<Self, ParamGroupError> {
         let mut new_patterns = vec![];
         for pattern in patterns {
@@ -170,11 +175,14 @@ impl ParamGroup {
     }
 
     #[cfg(feature = "std")]
-    /// Matches parameters for any the regex patterns (OR logic).
-    /// (e.g., "^encoder\.layer\.\d+$", or "^decoder\.layer\.\d+$" )
+    /// Matches parameters satisfying any regex pattern (OR logic).
+    ///
+    /// For example, a path can match either `^encoder\.layer\.\d+$` or
+    /// `^decoder\.layer\.\d+$`.
     ///
     /// # Errors
-    /// Returns a [ParamGroupError::InvalidPatternError] if the strings cannot be compiled into a valid regex.
+    ///
+    /// Returns [`ParamGroupError::InvalidPatternError`] if any string is not a valid regex.
     pub fn from_any_regexes<S: AsRef<str>>(patterns: Vec<S>) -> Result<Self, ParamGroupError> {
         let mut matchers = vec![];
         for pattern in patterns {
@@ -219,7 +227,7 @@ impl ParamGroup {
         }
     }
 
-    /// Matches a specific slice of predefined parameter IDs.
+    /// Matches a collection of predefined parameter IDs.
     pub fn from_ids(ids: Vec<ParamId>) -> Self {
         Self {
             matcher: ParamGroupMatcher::Explicit(Arc::new(ids)),
@@ -227,7 +235,7 @@ impl ParamGroup {
         }
     }
 
-    /// Fuse two parameter group.
+    /// Fuse the matchers of two parameter groups (OR logic).
     pub fn fuse(self, other: &Self) -> Self {
         Self {
             matcher: self.matcher.fuse(&other.matcher),
@@ -235,7 +243,7 @@ impl ParamGroup {
         }
     }
 
-    /// Exclude the given group from the current group
+    /// Exclude the given group from the current group.
     pub fn exclude(mut self, group: Self) -> Self {
         self.excludes = match &self.excludes {
             Some(excluded) => Some(excluded.clone().fuse(&group.matcher)),

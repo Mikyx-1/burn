@@ -146,12 +146,14 @@ impl Reparameterizer for Lora {
 }
 
 /// A [`Reparameterizer`] implementing QLoRA: it quantizes the (frozen) base weights and
-/// attaches full-precision trainable LoRA adapters to 2-D weights.
+/// attaches trainable LoRA adapters to 2-D weights.
 ///
 /// It is applied via [`Module::apply_qlora`](crate::module::Module::apply_qlora).
 ///
 /// The quantized base is kept at rest in its low-bit representation; the adapter contribution is
-/// added on top during the forward pass (the base is dequantized on the fly when composed).
+/// added on top during the forward pass (the base is dequantized on the fly when composed). Adapter
+/// factor precision follows the supplied [`Lora`] settings. Because a quantized base has no float
+/// dtype, factors use the default float dtype unless [`Lora::set_dtype`] selects one explicitly.
 /// Module-owned control flags are left unchanged, as with [`Lora`].
 pub struct QLora {
     lora: Lora,

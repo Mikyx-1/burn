@@ -1,11 +1,11 @@
 use super::{LrScheduler, LrSchedulerRecord};
 use crate::LearningRate;
 
-/// Constant learning rate implementing [learning rate scheduler](LrScheduler).
+/// A constant learning rate that implements [learning rate scheduler](LrScheduler).
 ///
 /// # Notes
 ///
-/// You can also use [learning rate](LearningRate) which the same effect.
+/// You can also use a bare [learning rate](LearningRate), which has the same effect.
 #[derive(new, Clone, Debug)]
 pub struct ConstantLr {
     lr: LearningRate,

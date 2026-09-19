@@ -70,7 +70,7 @@ impl ComposedLrSchedulerConfig {
         self
     }
 
-    /// Appends a [cosine scheduler](ComposedLrSchedulerConfig).
+    /// Appends a [cosine scheduler](crate::lr_scheduler::cosine::CosineAnnealingLrScheduler).
     pub fn cosine(mut self, config: CosineAnnealingLrSchedulerConfig) -> Self {
         self.schedulers.push(LrSchedulerConfig::Cosine(config));
         self

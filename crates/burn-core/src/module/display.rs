@@ -20,7 +20,7 @@ pub trait ModuleDisplayDefault {
     /// An optional content object containing the display attributes.
     fn content(&self, _content: Content) -> Option<Content>;
 
-    /// Gets the number of the parameters of the module.
+    /// Returns the number of scalar parameters in the module.
     fn num_params(&self) -> usize {
         0
     }
@@ -28,9 +28,10 @@ pub trait ModuleDisplayDefault {
 
 /// Trait to implement custom display settings for a module.
 ///
-/// In order to implement custom display settings for a module,
-/// 1. Add #[module(custom_display)] attribute to the module struct after #[derive(Module)]
-/// 2. Implement ModuleDisplay trait for the module
+/// To implement custom display settings for a module:
+///
+/// 1. Add `#[module(custom_display)]` to the module struct after `#[derive(Module)]`.
+/// 2. Implement [`ModuleDisplay`] for the module.
 pub trait ModuleDisplay: ModuleDisplayDefault {
     /// Formats the module with provided display settings.
     ///
@@ -148,16 +149,16 @@ pub trait ModuleDisplay: ModuleDisplayDefault {
 /// Custom module display settings.
 #[derive(Debug, Clone)]
 pub struct DisplaySettings {
-    /// Whether to print the module parameter ids.
+    /// Whether to print the module parameter IDs.
     show_param_id: Option<bool>,
 
     /// Whether to print the module attributes.
     show_all_attributes: Option<bool>,
 
-    /// Whether to print the module number of parameters.
+    /// Whether to print the number of scalar module parameters.
     show_num_parameters: Option<bool>,
 
-    /// Print new line after an attribute.
+    /// Whether to print a newline after each attribute.
     new_line_after_attribute: Option<bool>,
 
     /// Indentation size.
@@ -181,7 +182,7 @@ impl Default for DisplaySettings {
 }
 
 impl DisplaySettings {
-    /// Create a new format settings.
+    /// Create default display settings.
     ///
     /// # Returns
     ///
@@ -190,11 +191,11 @@ impl DisplaySettings {
         Default::default()
     }
 
-    /// Sets a flag to show module parameters.
+    /// Set whether to show module parameter IDs.
     ///
     /// # Arguments
     ///
-    /// * `flag` - Boolean flag to show module parameters.
+    /// * `flag` - Whether to show module parameter IDs.
     ///
     /// # Returns
     ///
@@ -204,11 +205,11 @@ impl DisplaySettings {
         self
     }
 
-    /// Sets a flag to show module attributes.
+    /// Set whether to show all module attributes.
     ///
     /// # Arguments
     ///
-    /// * `flag` - Boolean flag to show all module attributes.
+    /// * `flag` - Whether to show all module attributes.
     ///
     /// # Returns
     ///
@@ -218,11 +219,11 @@ impl DisplaySettings {
         self
     }
 
-    /// Sets a flag to show the number of module parameters.
+    /// Set whether to show the number of scalar module parameters.
     ///
     /// # Arguments
     ///
-    /// * `flag` - Boolean flag to show the number of module parameters.
+    /// * `flag` - Whether to show the number of scalar module parameters.
     ///
     /// # Returns
     ///
@@ -232,11 +233,11 @@ impl DisplaySettings {
         self
     }
 
-    /// Sets a flag to print a new line after an attribute.
+    /// Set whether to print a newline after each attribute.
     ///
     /// # Arguments
     ///
-    /// * `flag` - Boolean flag to print a new line after an attribute.
+    /// * `flag` - Whether to print a newline after each attribute.
     ///
     /// # Returns
     ///
@@ -260,11 +261,11 @@ impl DisplaySettings {
         self
     }
 
-    /// Inherits settings from the provided settings and return a new settings object.
+    /// Apply explicitly set values from the top-level settings and return the result.
     ///
     /// # Arguments
     ///
-    /// * `top` - The top level `DisplaySettings` to inherit from.
+    /// * `top` - The top-level `DisplaySettings` to inherit from.
     ///
     /// # Returns
     ///
@@ -297,7 +298,7 @@ impl DisplaySettings {
         updated
     }
 
-    /// A convenience method to wrap the DisplaySettings struct in an option.
+    /// Wrap these `DisplaySettings` in `Some`.
     ///
     /// # Returns
     ///
@@ -316,20 +317,20 @@ impl DisplaySettings {
         self
     }
 
-    /// Gets `show_param_id` flag, substitutes false if not set.
+    /// Get `show_param_id`, defaulting to `false` when unset.
     ///
-    /// This flag is used to print the module parameter ids.
+    /// This flag controls whether module parameter IDs are printed.
     ///
     /// # Returns
     ///
-    /// A boolean value indicating whether to show parameter ids.
+    /// A boolean value indicating whether to show parameter IDs.
     pub fn show_param_id(&self) -> bool {
         self.show_param_id.unwrap_or(false)
     }
 
-    /// Gets `show_all_attributes`, substitutes false if not set.
+    /// Get `show_all_attributes`, defaulting to `false` when unset.
     ///
-    /// This flag is used to force to print all module attributes, overriding custom attributes.
+    /// This flag forces all module attributes to be printed, overriding custom attributes.
     ///
     /// # Returns
     ///
@@ -338,41 +339,41 @@ impl DisplaySettings {
         self.show_all_attributes.unwrap_or(false)
     }
 
-    /// Gets `show_num_parameters`, substitutes true if not set.
+    /// Get `show_num_parameters`, defaulting to `true` when unset.
     ///
-    /// This flag is used to print the number of module parameters.
+    /// This flag controls whether the scalar parameter count is printed.
     ///
     /// # Returns
     ///
-    /// A boolean value indicating whether to show the number of parameters.
+    /// A boolean value indicating whether to show the scalar parameter count.
     pub fn show_num_parameters(&self) -> bool {
         self.show_num_parameters.unwrap_or(true)
     }
 
-    /// Gets `new_line_after_attribute`, substitutes true if not set.
+    /// Get `new_line_after_attribute`, defaulting to `true` when unset.
     ///
-    /// This flag is used to print a new line after an attribute.
+    /// This flag controls whether a newline is printed after each attribute.
     ///
     /// # Returns
     ///
-    /// A boolean value indicating whether to print a new line after an attribute.
+    /// A boolean value indicating whether to print a newline after each attribute.
     pub fn new_line_after_attribute(&self) -> bool {
         self.new_line_after_attribute.unwrap_or(true)
     }
 
-    /// Gets `indentation_size`, substitutes 2 if not set.
+    /// Get `indentation_size`, defaulting to `2` when unset.
     ///
-    /// This flag is used to set the size of indentation.
+    /// This value controls the indentation width.
     ///
     /// # Returns
     ///
-    /// An integer value indicating the size of indentation.
+    /// An integer value indicating the indentation width.
     pub fn indentation_size(&self) -> usize {
         self.indentation_size.unwrap_or(2)
     }
 }
 
-/// Struct to store the attributes of a module for formatting.
+/// Content used to format a module.
 #[derive(Clone, Debug)]
 pub struct Content {
     /// List of attributes.
@@ -384,12 +385,12 @@ pub struct Content {
     /// Display settings.
     pub display_settings: DisplaySettings,
 
-    /// Top level type name.
+    /// Top-level type name.
     pub top_level_type: Option<String>,
 }
 
 impl Content {
-    /// Creates a new attributes struct.
+    /// Create empty module-display content.
     ///
     /// # Arguments
     ///
@@ -407,7 +408,7 @@ impl Content {
         }
     }
 
-    /// Adds an attribute to the format settings. The value will be formatted and stored as a string.
+    /// Add an attribute to this content, formatting and storing its value as a string.
     ///
     /// # Arguments
     ///
@@ -492,8 +493,7 @@ impl Content {
         self
     }
 
-    /// A convenience method to wrap the Attributes struct in an option
-    /// because it is often used as an optional field.
+    /// Return this content when it contains displayable data, or `None` when it is empty.
     ///
     /// # Returns
     ///
@@ -507,7 +507,7 @@ impl Content {
         }
     }
 
-    /// Sets the top level type name.
+    /// Sets the top-level type name.
     ///
     /// # Arguments
     ///
@@ -515,7 +515,7 @@ impl Content {
     ///
     /// # Returns
     ///
-    /// Updated `Content` instance with the top level type name set.
+    /// Updated `Content` instance with the top-level type name set.
     pub fn set_top_level_type(mut self, ty: &str) -> Self {
         self.top_level_type = Some(ty.to_owned());
         self
@@ -546,7 +546,7 @@ pub struct Attribute {
     pub ty: String,
 }
 
-/// Extracts the short name of a type T
+/// Extract the short name of a type `T`.
 ///
 /// # Returns
 ///

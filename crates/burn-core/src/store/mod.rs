@@ -8,9 +8,9 @@
 //!
 //! This module is intentionally tiny: traversal is a straightforward
 //! [`ModuleVisitor`](crate::module::ModuleVisitor) / [`ModuleMapper`](crate::module::ModuleMapper)
-//! keyed by parameter path, with no filtering, adapters, or lazy snapshots.
-//! The richer snapshot/import tooling (filtering, key remapping, PyTorch/SafeTensors adapters,
-//! cross-framework stores) lives in the `burn-store` crate.
+//! keyed by parameter path, with optional [`ParamGroup`](crate::module::ParamGroup) filtering.
+//! Richer snapshot/import tooling, such as key remapping, PyTorch/SafeTensors adapters, lazy
+//! snapshots, and cross-framework stores, lives in the `burn-store` crate.
 
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -31,7 +31,7 @@ pub enum DTypePolicy {
     FromRecord,
     /// The record's data is cast to the module parameter's current dtype on load.
     ///
-    /// Note this materializes each target parameter to read its dtype.
+    /// Note this materializes each matched target parameter to read its dtype.
     CastToModule,
 }
 
@@ -40,8 +40,8 @@ pub enum DTypePolicy {
 pub enum RecordError {
     /// An I/O or format error occurred while reading or writing the record.
     Io(String),
-    /// Validation failed while applying the record (shape mismatch, or missing tensors
-    /// when partial loading is not allowed).
+    /// Validation failed while applying the record, such as a shape mismatch, a missing module
+    /// tensor, or an unused record tensor.
     Validation(String),
 }
 
@@ -78,8 +78,9 @@ struct RecordTensor {
 /// [`Module::load_record`]. Load-time behavior is
 /// configured with the builder methods; they are ignored when saving.
 ///
-/// The save-side dtype is intentionally not configurable: use `module.cast(dtype)` before
-/// taking the record. The record stores whatever dtype the module currently holds.
+/// The save-side dtype is intentionally not configurable. The record stores each parameter in its
+/// current dtype; cast or map parameters before taking the record when a different saved dtype is
+/// required.
 #[derive(Clone)]
 pub struct ModuleRecord {
     tensors: Vec<RecordTensor>,
@@ -157,7 +158,11 @@ impl ModuleRecord {
         self
     }
 
-    /// Enable or disable validation while loading.
+    /// Enable or disable validation of matched record tensors while loading.
+    ///
+    /// This controls errors collected while mapping matched entries (currently shape checks).
+    /// Missing module tensors and unused record tensors are controlled independently by
+    /// [`allow_partial`](Self::allow_partial) and [`allow_unused`](Self::allow_unused).
     pub fn validate(mut self, validate: bool) -> Self {
         self.validate = validate;
         self
@@ -232,8 +237,8 @@ impl ModuleRecord {
 
     /// Apply this record to a module, returning the loaded module.
     ///
-    /// Honors the record's [`DTypePolicy`], `validate`, and `allow_partial` settings. Backs
-    /// [`Module::try_load_record`](crate::module::Module::try_load_record).
+    /// Honors the record's [`DTypePolicy`], `validate`, `allow_partial`, and `allow_unused`
+    /// settings. Backs [`Module::try_load_record`](crate::module::Module::try_load_record).
     pub(crate) fn apply<M: Module>(self, module: M) -> Result<M, RecordError> {
         let validate = self.validate;
         let allow_partial = self.allow_partial;

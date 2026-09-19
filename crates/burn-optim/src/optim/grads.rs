@@ -9,28 +9,28 @@ use burn::module::{Module, ParamId};
 
 use super::visitor::{GradientsParamsChangeDevice, GradientsParamsConverter};
 
-/// Data type that contains gradients for parameters.
+/// Container of gradients keyed by parameter ID.
 #[derive(Default, Debug)]
 pub struct GradientsParams {
     container: TensorContainer<ParamId>,
 }
 
 impl GradientsParams {
-    /// Creates a new [GradientsParams](GradientsParams).
+    /// Create an empty [`GradientsParams`].
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Extract each tensor gradients for the given [module](Module).
+    /// Extract tensor gradients for the given [module](Module).
     ///
-    /// Note: This consumes the gradients. See ['from_module'] to extract gradients only for
-    ///  a specific module.
+    /// This consumes the gradient container. See [`Self::from_module`] to extract gradients from a
+    /// mutable container instead.
     pub fn from_grads<M: Module>(grads: Gradients, module: &M) -> Self {
         let mut grads = grads;
         Self::from_module(&mut grads, module)
     }
 
-    /// Extract each tensor gradients for the given [module](Module).
+    /// Extract tensor gradients for the given [module](Module).
     pub fn from_module<M: Module>(grads: &mut Gradients, module: &M) -> Self {
         let mut grads_params = GradientsParams::new();
         let mut visitor = GradientsParamsConverter::<M>::new(grads, &mut grads_params, None);
@@ -38,7 +38,7 @@ impl GradientsParams {
         grads_params
     }
 
-    /// Extract tensor gradients for the given [module](Module) and given parameters.
+    /// Extract tensor gradients for the given [module](Module) and parameter IDs.
     pub fn from_params<M: Module>(grads: &mut Gradients, module: &M, params: &[ParamId]) -> Self {
         let mut grads_params = GradientsParams::new();
         let mut visitor =
@@ -47,42 +47,41 @@ impl GradientsParams {
         grads_params
     }
 
-    /// Get the gradients for the given [parameter id](ParamId).
+    /// Get the gradient for the given [parameter ID](ParamId).
     ///
     /// # Notes
     ///
-    /// You should use [remove](GradientsParams::remove) if you want to get the gradients
-    /// only one time.
+    /// Use [`Self::remove`] to retrieve a gradient only once.
     pub fn get<const D: usize>(&self, id: ParamId) -> Option<Tensor<D>> {
         self.container.get(&id)
     }
 
-    /// Remove the gradients for the given [parameter id](ParamId).
+    /// Remove the gradient for the given [parameter ID](ParamId).
     pub fn remove<const D: usize>(&mut self, id: ParamId) -> Option<Tensor<D>> {
         self.container.remove(&id)
     }
 
-    /// Register a gradients tensor for the given [parameter id](ParamId).
+    /// Register a gradient tensor for the given [parameter ID](ParamId).
     ///
     /// # Notes
     ///
-    /// If a tensor is already registered for the given [parameter id](ParamId), it will be replaced.
+    /// If a tensor is already registered for the given [parameter ID](ParamId), it will be replaced.
     pub fn register<const D: usize>(&mut self, id: ParamId, value: Tensor<D>) {
         // TODO: always call value.inner() to make sure?
         self.container.register(id, value)
     }
 
-    /// The number of gradients tensors registered.
+    /// The number of registered gradient tensors.
     pub fn len(&self) -> usize {
         self.container.len()
     }
 
-    /// If any tensor is contained.
+    /// Whether no gradient tensors are registered.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    /// Change the device of each tensor gradients registered for the given [module](Module).
+    /// Move each gradient tensor registered for the given [module](Module) to the specified device.
     pub fn to_device<M: Module>(mut self, device: &Device, module: &M) -> Self {
         let mut visitor = GradientsParamsChangeDevice::<M>::new(device, &mut self);
         module.visit(&mut visitor);

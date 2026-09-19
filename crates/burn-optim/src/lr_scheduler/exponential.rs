@@ -20,7 +20,7 @@ pub struct ExponentialLrSchedulerConfig {
 }
 
 impl ExponentialLrSchedulerConfig {
-    /// Initializes a [exponential learning rate scheduler](ExponentialLrScheduler).
+    /// Initializes an [exponential learning rate scheduler](ExponentialLrScheduler).
     pub(crate) fn build(&self) -> Result<ExponentialLrScheduler, String> {
         if self.initial_lr <= 0. || self.initial_lr > 1. {
             return Err("Initial learning rate must be greater than 0 and at most 1".into());
@@ -50,7 +50,7 @@ impl ExponentialLrSchedulerConfig {
     }
 }
 
-/// A exponential learning rate scheduler.
+/// An exponential learning rate scheduler.
 ///
 /// See [ExponentialLrSchedulerConfig] for more information.
 #[derive(Clone, Copy, Debug)]
