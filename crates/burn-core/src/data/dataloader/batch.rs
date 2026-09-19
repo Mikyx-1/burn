@@ -172,12 +172,12 @@ impl<I, O> Iterator for BatchDataloaderIterator<I, O> {
                 .unwrap_or(1)
                 .min(self.len - self.current_index);
             let indexes = (self.current_index..self.current_index + chunk_size).collect();
+            self.current_index += chunk_size;
 
             let items = match self.dataset.get_many(indexes) {
                 Ok(items) => items,
                 Err(err) => return Some(Err(err)),
             };
-            self.current_index += chunk_size;
 
             for item in items {
                 self.strategy.add(item);
@@ -212,6 +212,42 @@ mod tests {
     use crate::data::dataloader::FixBatchStrategy;
     use crate::data::dataloader::batcher::TestBatcher;
     use crate::data::dataset::FakeDataset;
+
+    struct FailingFirstDataset;
+
+    impl Dataset<usize> for FailingFirstDataset {
+        fn get(&self, index: usize) -> Result<usize, burn_dataset::DatasetError> {
+            if index == 0 {
+                return Err(burn_dataset::DatasetError::new(std::io::Error::other(
+                    "first item failed",
+                )));
+            }
+            Ok(index)
+        }
+
+        fn len(&self) -> usize {
+            3
+        }
+    }
+
+    #[test]
+    fn retrieval_error_advances_to_the_next_batch() {
+        let batcher = Arc::new(TestBatcher::new());
+        let dataset = Arc::new(FailingFirstDataset);
+        let dataloader = BatchDataLoader::new(
+            Box::new(FixBatchStrategy::new(1)),
+            dataset,
+            batcher,
+            Default::default(),
+            None,
+        );
+
+        let mut iterator = dataloader.iter();
+        assert!(iterator.next().unwrap().is_err());
+        assert_eq!(iterator.next().unwrap().unwrap(), vec![1]);
+        assert_eq!(iterator.next().unwrap().unwrap(), vec![2]);
+        assert!(iterator.next().is_none());
+    }
 
     #[test]
     fn test_batch_dataloader() {
