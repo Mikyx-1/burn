@@ -611,7 +611,7 @@ where
     /// ```
     pub fn argtopk(self, k: usize, dim: impl AsIndex) -> Tensor<D, Int> {
         let dim = unwrap_dim_index(dim.try_dim_index(D), "Argtopk");
-        assert!(self.shape()[dim] > k);
+        check!(TensorCheck::topk("Argtopk", k, dim, &self.shape()));
         Tensor::new(K::argtopk(self.primitive, dim, k))
     }
 
