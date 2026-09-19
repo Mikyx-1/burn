@@ -90,7 +90,7 @@ pub struct TrainingItem<T> {
     /// The progress.
     pub progress: Progress,
 
-    /// The iteration, if it it different from the items processed.
+    /// The iteration, if it is different from the number of items processed.
     pub iteration: Option<usize>,
 
     /// The learning rate for a module's parameters.
@@ -117,7 +117,7 @@ pub struct EvaluationItem<T> {
     /// The progress.
     pub progress: Progress,
 
-    /// The iteration, if it it different from the items processed.
+    /// The iteration, if it is different from the number of items processed.
     pub iteration: Option<usize>,
 }
 

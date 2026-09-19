@@ -48,7 +48,7 @@ pub trait RouterClient: Clone + Send + Sync + Sized {
     /// buffered operations are handed off for execution (and, for the remote backend, sent to
     /// the server) instead of sitting in a local buffer.
     fn flush(&self);
-    /// Create a new (uninitialized) empty tensor and returns its corresponding [tensor id](TensorId).
+    /// Create a new (uninitialized) empty tensor and return its corresponding [tensor id](TensorId).
     fn create_empty_handle(&self) -> TensorId;
     /// Create a new [RouterTensor] from the tensor data.
     fn register_tensor_data(&self, data: TensorData) -> RouterTensor<Self>;

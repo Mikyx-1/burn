@@ -102,7 +102,7 @@ pub trait Protocol: Clone + Send + Sync + 'static {
 /// Error that happens during a communication.
 pub trait CommunicationError: Debug + Send + 'static {}
 
-/// The client is only used to create a [channel](CommunicationChannel), which should be use to
+/// The client is only used to create a [channel](CommunicationChannel), which should be used to
 /// transmit information with the [server](ProtocolServer).
 pub trait ProtocolClient: Send + Sync + 'static {
     /// Channel used by this protocol.
@@ -129,7 +129,7 @@ pub struct Message {
     pub data: bytes::Bytes,
 }
 
-/// Defines how to create a server that respond to a [channel](CommunicationChannel).
+/// Defines how to create a server that responds to a [channel](CommunicationChannel).
 pub trait ProtocolServer: Sized + Send + Sync + 'static {
     /// Channel used by this protocol.
     type Channel: CommunicationChannel<Error = Self::Error>;
