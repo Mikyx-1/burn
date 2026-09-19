@@ -10,7 +10,7 @@ on:
         description: "Run xtask publish in dry-run mode (no publish)"
         type: boolean
         required: false
-        default: false
+        default: true
 
 jobs:
   publish-burn-rl:
