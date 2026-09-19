@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use super::metric::Fid;
 
-const INCEPTION_WEIGHTS_URL: &str = "https://github.com/mseitzer/pytorch-fid/releases/download/fid_weights/pt-inception-2015-12-05-6726825d.pth";
+const INCEPTION_WEIGHTS_URL: &str = "https://github.com/mseitzer/pytorch-fid/releases/download/fid_weights/pt_inception-2015-12-05-6726825d.pth";
 
 fn get_cache_dir() -> PathBuf {
     let cache_dir = dirs::cache_dir()
@@ -34,7 +34,7 @@ fn download_if_needed(url: &str, cache_path: &PathBuf, message: &str) {
 /// Weights are cached in `~/.cache/burn-dataset/fid/`.
 pub fn load_pretrained_weights(mut fid: Fid) -> Fid {
     let cache_dir = get_cache_dir();
-    let cache_path = cache_dir.join("pt-inception-2015-12-05-6726825d.pth");
+    let cache_path = cache_dir.join("pt_inception-2015-12-05-6726825d.pth");
 
     download_if_needed(
         INCEPTION_WEIGHTS_URL,
