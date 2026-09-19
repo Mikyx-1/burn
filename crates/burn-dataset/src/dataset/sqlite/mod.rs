@@ -808,7 +808,7 @@ where
     /// rowids back to the engine. A run whose `set_completed` fails publishes nothing, so indexes
     /// recorded during it must be discarded along with it.
     pub fn write(&self, split: &str, item: &I) -> Result<usize> {
-        // Acquire the read lock (wont't block other reads)
+        // Acquire the read lock (won't block other reads)
         let is_completed = self
             .is_completed
             .read()
