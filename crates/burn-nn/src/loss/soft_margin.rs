@@ -1,6 +1,6 @@
 use burn_core as burn;
 
-use crate::loss::reduction::Reduction;
+use crate::loss::{assert_binary_float_targets, reduction::Reduction};
 
 use burn::module::Module;
 use burn::tensor::Tensor;
@@ -52,6 +52,8 @@ impl SoftMarginLoss {
         logits: Tensor<D>,
         targets: Tensor<D>,
     ) -> Tensor<D> {
+        assert_binary_float_targets(&targets);
+
         // log(1 + exp(-target * logit)) = softplus(-target * logit)
         softplus(targets.mul(logits).neg(), 1.0)
     }
@@ -103,5 +105,25 @@ mod tests {
         no_reduction
             .into_data()
             .assert_approx_eq::<FT>(&expected, Tolerance::default());
+    }
+
+    #[test]
+    #[should_panic(expected = "All target values must be either -1 or 1.")]
+    fn invalid_target_value_should_panic() {
+        let device = Default::default();
+        let logits = Tensor::<1>::zeros([2], &device);
+        let targets = Tensor::<1>::from_data(TensorData::from([1.0, 0.0]), &device);
+
+        SoftMarginLoss::new().forward_no_reduction(logits, targets);
+    }
+
+    #[test]
+    #[should_panic(expected = "All target values must be either -1 or 1.")]
+    fn nan_target_value_should_panic() {
+        let device = Default::default();
+        let logits = Tensor::<1>::zeros([2], &device);
+        let targets = Tensor::<1>::from_data(TensorData::from([1.0, f32::NAN]), &device);
+
+        SoftMarginLoss::new().forward_no_reduction(logits, targets);
     }
 }

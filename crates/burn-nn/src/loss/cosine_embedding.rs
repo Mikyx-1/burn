@@ -4,7 +4,7 @@ use burn_linalg::cosine_similarity;
 
 use burn_core as burn;
 
-use crate::loss::reduction::Reduction;
+use crate::loss::{assert_binary_int_targets, reduction::Reduction};
 use burn::config::Config;
 use burn::module::Module;
 use burn::module::{Content, DisplaySettings, ModuleDisplay};
@@ -143,6 +143,7 @@ impl CosineEmbeddingLoss {
         let [batch_size, dim] = input1.dims();
         assert_shape!(input2, [batch_size, dim]);
         assert_shape!(target, [batch_size]);
+        assert_binary_int_targets(target);
     }
 }
 
@@ -185,6 +186,19 @@ mod tests {
         let input2 = Tensor::<2>::zeros([2, 3], &device);
         let target = Tensor::<1, Int>::zeros([1], &device);
         let _ = CosineEmbeddingLossConfig::new()
+            .init()
+            .forward_no_reduction(input1, input2, target);
+    }
+
+    #[test]
+    #[should_panic(expected = "All target values must be either -1 or 1.")]
+    fn target_values_must_be_minus_one_or_one() {
+        let device = Default::default();
+        let input1 = Tensor::<2>::zeros([2, 3], &device);
+        let input2 = Tensor::<2>::zeros([2, 3], &device);
+        let target = Tensor::<1, Int>::from_data(TensorData::from([1, 0]), &device);
+
+        CosineEmbeddingLossConfig::new()
             .init()
             .forward_no_reduction(input1, input2, target);
     }
