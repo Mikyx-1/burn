@@ -10,6 +10,16 @@ fn int_should_support_one_hot() {
 }
 
 #[test]
+fn int_one_hot_should_support_one_class() {
+    let tensor = TestTensorInt::<1>::from([0, 0]);
+
+    let one_hot_tensor: TestTensorInt<2> = tensor.one_hot(1);
+
+    let expected = TensorData::from([[1], [1]]);
+    one_hot_tensor.into_data().assert_eq(&expected, false);
+}
+
+#[test]
 #[should_panic]
 fn int_one_hot_should_panic_when_index_exceeds_number_of_classes() {
     let tensor = TestTensorInt::<1>::from([5]);
