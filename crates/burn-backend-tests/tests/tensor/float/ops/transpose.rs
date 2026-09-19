@@ -114,3 +114,14 @@ fn should_support_swap_dims_neg_index() {
         .into_data()
         .assert_approx_eq::<FloatElem>(&expected, Tolerance::default());
 }
+
+#[test]
+fn should_treat_rank_one_transpose_as_no_op() {
+    let tensor = TestTensor::<1>::from([1.0, 2.0, 3.0]);
+
+    let output = tensor.transpose();
+
+    output
+        .into_data()
+        .assert_approx_eq::<FloatElem>(&TensorData::from([1.0, 2.0, 3.0]), Tolerance::default());
+}

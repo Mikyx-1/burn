@@ -391,6 +391,7 @@ where
     /// For a 2D tensor, this is the standard matrix transpose. For `D > 2`, the transpose is
     /// applied on the last two dimensions. For example, the transpose of a tensor with shape
     /// `[1, 2, 3, 4]` will have shape `[1, 2, 4, 3]`.
+    /// For tensors with fewer than two dimensions, transpose is a no-op.
     ///
     /// See also [`permute`](Tensor::permute).
     ///
@@ -418,6 +419,10 @@ where
     /// println!("{transposed}");
     /// ```
     pub fn transpose(self) -> Tensor<D, K> {
+        if D < 2 {
+            return self;
+        }
+
         Tensor::new(K::transpose(self.primitive))
     }
 

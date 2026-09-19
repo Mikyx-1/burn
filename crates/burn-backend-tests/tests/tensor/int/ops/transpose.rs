@@ -26,3 +26,14 @@ fn should_support_swap_dims_int() {
 
     output.into_data().assert_eq(&expected, false);
 }
+
+#[test]
+fn should_treat_rank_one_transpose_as_no_op_int() {
+    let tensor = TestTensorInt::<1>::from([1, 2, 3]);
+
+    let output = tensor.transpose();
+
+    output
+        .into_data()
+        .assert_eq(&TensorData::from([1, 2, 3]), false);
+}
