@@ -81,7 +81,7 @@ impl<const D: usize> Tensor<D, Int> {
     ///
     /// # Panics
     ///
-    /// Panics if `D2` is not equal to `D+1`.
+    /// Panics if `D2` is not equal to `D+1` or if the runtime shape rank does not equal `D`.
     ///
     /// # Examples
     ///
