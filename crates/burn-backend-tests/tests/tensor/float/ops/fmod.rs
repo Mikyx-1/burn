@@ -293,3 +293,19 @@ fn should_handle_special_scalar_cases() {
     assert_eq!(values[2], 0.0f32.elem::<FloatElem>());
     assert_eq!(values[3], 0.0f32.elem::<FloatElem>());
 }
+
+#[test]
+fn should_handle_infinite_scalar_divisor_with_infinite_dividends() {
+    let tensor = TestTensor::<1>::from_data(
+        [f32::INFINITY, f32::NEG_INFINITY, 5.0, -5.0],
+        &Default::default(),
+    );
+
+    let output = tensor.fmod_scalar(f32::INFINITY).into_data();
+    let values = output.as_slice::<FloatElem>().unwrap();
+
+    assert!(values[0].is_nan());
+    assert!(values[1].is_nan());
+    assert_eq!(values[2], 5.0f32.elem::<FloatElem>());
+    assert_eq!(values[3], (-5.0f32).elem::<FloatElem>());
+}

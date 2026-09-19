@@ -83,19 +83,19 @@ impl<const D: usize> Tensor<D, Float> {
     /// // Result: [1.3, -1.3, 1.5, -1.5]
     /// ```
     pub fn fmod_scalar(self, scalar: f32) -> Self {
+        if scalar.is_infinite() {
+            // Finite values are unchanged, while an infinite dividend must produce NaN.
+            // Multiplication by zero creates NaN exactly at those infinite positions.
+            let infinite = self.clone().is_inf();
+            let nan_at_infinity = self.clone().mul_scalar(0.0);
+
+            return self.mask_where(infinite, nan_at_infinity);
+        }
+
         // Normal case: fmod(x, y) = x - y * trunc(x / y)
         let quotient = self.clone().div_scalar(scalar);
         let truncated = quotient.trunc();
         let product = truncated.mul_scalar(scalar);
-
-        // Handle the special case where scalar is infinity
-        // When scalar is ±∞ and self is finite, quotient is 0, truncated is 0
-        // but 0 * infinity = NaN, which is wrong - it should be 0
-        if scalar.is_infinite() {
-            // For finite values, fmod(x, ±∞) = x
-            // For infinite values, fmod(±∞, ±∞) = NaN (which is handled by arithmetic)
-            return self;
-        }
 
         self - product
     }
