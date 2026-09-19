@@ -248,6 +248,17 @@ mod tests {
     }
 
     #[test]
+    fn bool_to_int_cast_has_int_bridge_kind() {
+        let tensor = Tensor::<2, Bool>::empty([2, 3], &Default::default());
+
+        let bridge = tensor.cast(crate::IntDType::I32).into_bridge();
+
+        assert!(bridge.is_int());
+        let tensor = Tensor::<2, Int>::from_bridge(bridge);
+        assert_eq!(tensor.dims(), [2, 3]);
+    }
+
+    #[test]
     fn bool_tensor_bridge_roundtrip() {
         let tensor = Tensor::<2, Bool>::empty([2, 3], &Default::default());
         let shape = tensor.shape();
