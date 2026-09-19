@@ -62,3 +62,10 @@ fn not_enough_destination_dimension() {
     let expected_shape = Shape::new([75]);
     assert_eq!(flattened_tensor.shape(), expected_shape);
 }
+
+#[test]
+#[should_panic(expected = "The destination rank must be 2, got 3")]
+fn flatten_rejects_invalid_rank() {
+    let tensor = TestTensor::<4>::ones(Shape::new([2, 3, 4, 5]), &Default::default());
+    let _: TestTensor<3> = tensor.flatten(1, 3);
+}

@@ -216,14 +216,16 @@ impl TensorCheck {
             );
         }
 
-        if (D2 as i32) < (D1 as i32 - (end_dim as i32 - start_dim as i32)) {
-            check = check.register(
-                "Flatten",
-                TensorError::new(format!(
-                    "The destination dimension ({D2}) must be large enough to accommodate the \
-                     flattening operation."
-                )),
-            );
+        if start_dim <= end_dim && end_dim < D1 {
+            let expected = D1 - (end_dim - start_dim);
+            if D2 != expected {
+                check = check.register(
+                    "Flatten",
+                    TensorError::new(format!(
+                        "The destination rank must be {expected}, got {D2}."
+                    )),
+                );
+            }
         }
 
         check
@@ -246,6 +248,17 @@ impl TensorCheck {
 
     pub(crate) fn squeeze<const D2: usize>(dim: usize, tensor_dims: &[usize]) -> Self {
         let mut check = Self::Ok;
+
+        if D2.checked_add(1) != Some(tensor_dims.len()) {
+            check = check.register(
+                "Squeeze",
+                TensorError::new(format!(
+                    "The destination rank must be {}, got {D2}.",
+                    tensor_dims.len().saturating_sub(1)
+                )),
+            );
+        }
+
         // This should actually be to check that the dimension to squeeze
         // has a size of 1
         if tensor_dims[dim] != 1 {
@@ -580,12 +593,12 @@ impl TensorCheck {
     ) -> Self {
         let mut check = Self::Ok;
 
-        if D1 == D2 {
+        if D1.checked_add(1) != Some(D2) {
             check = check.register(
                 "Stack",
                 TensorError::new(format!(
-                    "Can't stack tensors on existing dimension {dim}, the input and output ranks are the same (D={D1}; D2={D2}).\
-                    If you want to concatenate the tensors along the specified dimension ({dim}), use `Tensor::cat` instead.",
+                    "Stack adds exactly one dimension: expected destination rank {}, got {D2}.",
+                    D1.saturating_add(1)
                 )),
             );
         }

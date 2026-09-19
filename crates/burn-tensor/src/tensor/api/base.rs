@@ -3370,6 +3370,11 @@ impl<const D2: usize, I: AsIndex> ReshapeArgs<D2> for [I; D2] {
 
 impl<const D2: usize> ReshapeArgs<D2> for Shape {
     fn into_shape<const D: usize>(self, source: Shape) -> Shape {
+        assert_eq!(
+            self.num_dims(),
+            D2,
+            "Reshape target rank must match the destination tensor rank"
+        );
         unwrap_shape_reshape(source.reshape(self))
     }
 }
@@ -3382,6 +3387,15 @@ pub trait BroadcastArgs<const D1: usize, const D2: usize> {
 
 impl<const D1: usize, const D2: usize> BroadcastArgs<D1, D2> for Shape {
     fn into_shape(self, _shape: &Shape) -> Shape {
+        assert!(
+            D2 >= D1,
+            "Expand cannot reduce tensor rank from {D1} to {D2}"
+        );
+        assert_eq!(
+            self.num_dims(),
+            D2,
+            "Expand target rank must match the destination tensor rank"
+        );
         self
     }
 }

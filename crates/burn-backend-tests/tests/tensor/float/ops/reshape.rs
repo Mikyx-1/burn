@@ -1,5 +1,5 @@
 use super::*;
-use burn_tensor::TensorData;
+use burn_tensor::{Shape, TensorData};
 
 #[test]
 fn should_support_rank() {
@@ -87,4 +87,11 @@ fn neg_value() {
     let data = TensorData::from([0.0, 1.0, 2.0]);
     let tensor = TestTensor::<1>::from_data(data, &Default::default());
     let _data_actual = tensor.reshape([-2, -1]).into_data();
+}
+
+#[test]
+#[should_panic(expected = "Reshape target rank must match the destination tensor rank")]
+fn reshape_rejects_invalid_rank() {
+    let tensor = TestTensor::<2>::ones([2, 3], &Default::default());
+    let _: TestTensor<2> = tensor.reshape(Shape::new([2, 3, 1]));
 }

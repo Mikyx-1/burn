@@ -67,3 +67,13 @@ fn should_panic_when_stack_exceeds_dimension() {
 
     let _output = Tensor::stack::<4>(vec![tensor_1, tensor_2], 3);
 }
+
+#[test]
+#[should_panic(expected = "Stack adds exactly one dimension")]
+fn stack_rejects_invalid_rank() {
+    let device = Default::default();
+    let tensor_1 = TestTensor::<2>::from_data([[1.0, 2.0]], &device);
+    let tensor_2 = TestTensor::<2>::from_data([[3.0, 4.0]], &device);
+
+    let _: TestTensor<4> = Tensor::stack(vec![tensor_1, tensor_2], 0);
+}
