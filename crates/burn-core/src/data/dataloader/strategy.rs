@@ -49,7 +49,13 @@ impl<I> FixBatchStrategy<I> {
     /// # Returns
     ///
     /// The strategy.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `batch_size` is zero.
     pub fn new(batch_size: usize) -> Self {
+        assert!(batch_size > 0, "Batch size must be greater than zero");
+
         FixBatchStrategy {
             items: Vec::with_capacity(batch_size),
             batch_size,
@@ -83,5 +89,16 @@ impl<I: Send + Sync + 'static> BatchStrategy<I> for FixBatchStrategy<I> {
 
     fn batch_size(&self) -> Option<usize> {
         Some(self.batch_size)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FixBatchStrategy;
+
+    #[test]
+    #[should_panic(expected = "Batch size must be greater than zero")]
+    fn fix_batch_strategy_rejects_zero_batch_size() {
+        let _ = FixBatchStrategy::<usize>::new(0);
     }
 }

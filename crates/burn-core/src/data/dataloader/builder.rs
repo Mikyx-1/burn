@@ -54,6 +54,10 @@ where
     /// # Returns
     ///
     /// The data loader builder.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `batch_size` is zero.
     pub fn batch_size(mut self, batch_size: usize) -> Self {
         self.strategy = Some(Box::new(FixBatchStrategy::new(batch_size)));
         self
