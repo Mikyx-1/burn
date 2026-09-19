@@ -321,7 +321,7 @@ pub struct LBFGSConfig {
     /// Maximal number of iterations per optimization step (default: 20)
     #[config(default = 20)]
     pub max_iter: usize,
-    /// Update history size (default: 100).
+    /// Update history size (default: 100). Must be at least one.
     #[config(default = 100)]
     pub history_size: usize,
     /// Termination tolerance on first order optimality (default: 1e-7).
@@ -331,6 +331,7 @@ pub struct LBFGSConfig {
     #[config(default = 1e-9)]
     pub tolerance_change: f64,
     /// Maximal number of function evaluations per optimization step (default: max_iter * 1.25).
+    /// Must be at least one when specified.
     #[config(default = "None")]
     pub max_eval: Option<usize>,
     /// Either ‘strong_wolfe’ or None (default: None).
@@ -343,10 +344,26 @@ impl LBFGSConfig {
     ///
     /// # Returns
     ///
-    /// Returns an optimizer that can be used to optimize a module
+    /// Returns an optimizer that can be used to optimize a module.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `history_size` or an explicitly configured `max_eval` is zero.
     pub fn init(&self) -> LBFGS {
-        // by default max_eval = max_iter * 5/4
-        let max_eval = self.max_eval.unwrap_or(self.max_iter * 5 / 4);
+        assert!(
+            self.history_size > 0,
+            "LBFGS history size must be at least 1"
+        );
+        if let Some(max_eval) = self.max_eval {
+            assert!(
+                max_eval > 0,
+                "LBFGS maximum number of function evaluations must be at least 1"
+            );
+        }
+
+        // floor(max_iter * 1.25), without overflowing for large iteration limits.
+        let default_max_eval = self.max_iter.saturating_add(self.max_iter / 4).max(1);
+        let max_eval = self.max_eval.unwrap_or(default_max_eval);
         LBFGS {
             config: LBFGSConfig {
                 max_iter: self.max_iter,
@@ -600,7 +617,12 @@ impl LBFGS {
         M: Module + Clone,
         F: FnMut(M) -> (f64, GradientsParams),
     {
-        // evaluate initial f(x) and df/dx
+        let max_eval = self
+            .config
+            .max_eval
+            .expect("LBFGS must be initialized with an evaluation limit");
+
+        // Evaluate the initial objective and gradient. This always consumes one evaluation.
         let (mut loss, grads) = closure(module.clone());
         let mut current_evals = 1;
 
@@ -616,8 +638,8 @@ impl LBFGS {
 
         let opt_cond =
             flat_grad.clone().abs().max().into_scalar::<f64>() <= self.config.tolerance_grad;
-        // optimal condition
-        if opt_cond {
+        // Stop when already optimal or when the initial evaluation exhausted the budget.
+        if opt_cond || current_evals >= max_eval {
             return (module, loss);
         }
 
@@ -633,7 +655,7 @@ impl LBFGS {
         let mut n_iter = 0;
 
         // optimize for a max of max_iter iterations
-        while n_iter < self.config.max_iter {
+        while n_iter < self.config.max_iter && current_evals < max_eval {
             // keep track of nb of iterations
             n_iter += 1;
             self.state.g_iter += 1;
@@ -751,7 +773,7 @@ impl LBFGS {
                     1e-4,
                     0.9,
                     self.config.tolerance_change,
-                    self.config.max_eval.unwrap() - current_evals,
+                    (max_eval - current_evals).saturating_sub(1),
                 );
 
                 loss = ls_f;
@@ -780,7 +802,7 @@ impl LBFGS {
 
             // check conditions
 
-            if current_evals >= self.config.max_eval.unwrap() {
+            if current_evals >= max_eval {
                 break;
             }
 
@@ -829,6 +851,77 @@ mod tests {
             bias: Some(Param::from_data(bias, device)),
         }
     }
+
+    fn count_step_evaluations(line_search_fn: LineSearchFn, max_eval: usize) -> usize {
+        let device = Device::default().autodiff();
+        let x_data = Tensor::<2>::from_data([[1.0], [2.0], [3.0]], &device);
+        let y_true = Tensor::<2>::from_data([[3.0], [5.0], [7.0]], &device);
+        let module = given_linear_layer(
+            TensorData::from([[0.5f64]]),
+            TensorData::from([0.1f64]),
+            &device,
+        );
+        let mut optimizer = LBFGSConfig::new()
+            .with_max_iter(10)
+            .with_max_eval(Some(max_eval))
+            .with_line_search_fn(line_search_fn)
+            .init();
+        let mut calls = 0;
+
+        {
+            let mut closure = |mod_in: Linear| {
+                calls += 1;
+                let output = mod_in.forward(x_data.clone());
+                let loss = burn_nn::loss::MseLoss::new().forward(
+                    output,
+                    y_true.clone(),
+                    burn_nn::loss::Reduction::Sum,
+                );
+                let grads = loss.backward();
+                let grads_params = GradientsParams::from_grads(grads, &mod_in);
+                (loss.into_scalar::<f64>(), grads_params)
+            };
+            let _ = optimizer.step(0.001, module, &mut closure);
+        }
+
+        calls
+    }
+
+    #[test]
+    #[should_panic(expected = "LBFGS history size must be at least 1")]
+    fn rejects_zero_history_size() {
+        let _ = LBFGSConfig::new().with_history_size(0).init();
+    }
+
+    #[test]
+    #[should_panic(expected = "LBFGS maximum number of function evaluations must be at least 1")]
+    fn rejects_zero_max_eval() {
+        let _ = LBFGSConfig::new().with_max_eval(Some(0)).init();
+    }
+
+    #[test]
+    fn default_max_eval_is_overflow_safe() {
+        let optimizer = LBFGSConfig::new().with_max_iter(usize::MAX).init();
+
+        assert_eq!(optimizer.config.max_eval, Some(usize::MAX));
+    }
+
+    #[test]
+    fn respects_function_evaluation_budgets() {
+        for line_search_fn in [LineSearchFn::None, LineSearchFn::StrongWolfe] {
+            assert_eq!(count_step_evaluations(line_search_fn, 1), 1);
+
+            for max_eval in [2, 5] {
+                let calls = count_step_evaluations(line_search_fn, max_eval);
+                assert!(calls > 1);
+                assert!(
+                    calls <= max_eval,
+                    "{line_search_fn:?} used {calls} evaluations with a budget of {max_eval}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn test_cubic_interpolate() {
         let tolerance = 1e-8;
