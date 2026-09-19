@@ -29,7 +29,8 @@ jobs:
       # --------------------------------------------------------------------------------
       - name: Install valgrind
         run: |
-          sudo apt-get install valgrind
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends valgrind
       # --------------------------------------------------------------------------------
       - name: Run cargo-valgrind
         env:
