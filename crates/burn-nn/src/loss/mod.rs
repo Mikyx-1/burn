@@ -1,3 +1,27 @@
+use burn_core::tensor::{Int, Tensor};
+
+const BINARY_TARGET_ERROR: &str = "All target values must be either -1 or 1.";
+
+pub(crate) fn assert_binary_float_targets<const D: usize>(targets: &Tensor<D>) {
+    let valid = targets
+        .clone()
+        .equal_scalar(1.0)
+        .bool_or(targets.clone().equal_scalar(-1.0))
+        .all()
+        .into_scalar::<bool>();
+    assert!(valid, "{BINARY_TARGET_ERROR}");
+}
+
+pub(crate) fn assert_binary_int_targets<const D: usize>(targets: &Tensor<D, Int>) {
+    let valid = targets
+        .clone()
+        .equal_scalar(1)
+        .bool_or(targets.clone().equal_scalar(-1))
+        .all()
+        .into_scalar::<bool>();
+    assert!(valid, "{BINARY_TARGET_ERROR}");
+}
+
 mod binary_cross_entropy;
 mod cosine_embedding;
 mod cross_entropy;
