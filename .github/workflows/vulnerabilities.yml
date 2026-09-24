@@ -105,7 +105,7 @@ jobs:
         env:
           RUSTFLAGS: -Zsanitizer=memory -Zsanitizer-memory-track-origins -Copt-level=3
           RUSTDOCFLAGS: -Zsanitizer=memory -Zsanitizer-memory-track-origins
-        # Looking for unitialized memory.
+        # Looking for uninitialized memory.
         run: cargo test -Zbuild-std --target x86_64-unknown-linux-gnu -- --nocapture
 
   safe-stack:
