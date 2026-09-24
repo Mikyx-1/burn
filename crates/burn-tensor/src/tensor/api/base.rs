@@ -2689,6 +2689,7 @@ where
     /// # Panics
     ///
     /// If the dimension is greater than the number of dimensions of the tensor.
+    /// If `chunks` is zero.
     ///
     /// # Returns
     /// A vector of tensors.
@@ -2718,33 +2719,22 @@ where
     /// println!("{chunks:?}");
     /// ```
     pub fn chunk(self, chunks: usize, dim: impl AsIndex) -> Vec<Self> {
+        assert!(chunks > 0, "The number of chunks must be greater than zero");
+
         let dim = unwrap_dim_index(dim.try_dim_index(D), "Chunk");
         let size = self.shape()[dim];
-        if size < chunks {
-            return (0..size)
-                .map(|i| Self::narrow(self.clone(), dim, i, 1))
-                .collect();
+        if size == 0 {
+            return Vec::new();
         }
 
-        let mut tensors = Vec::with_capacity(chunks);
-        let mut sum_chunk_size = 0;
-        if size.is_multiple_of(chunks) {
-            let chunk_size = size / chunks;
-            for _ in 0..chunks {
-                tensors.push(Self::narrow(self.clone(), dim, sum_chunk_size, chunk_size));
-                sum_chunk_size += chunk_size;
-            }
-        } else {
-            let chunk_size = (size / chunks) + 1; // assumes not divisible
-            for _ in 0..chunks - 1 {
-                tensors.push(Self::narrow(self.clone(), dim, sum_chunk_size, chunk_size));
-                sum_chunk_size += chunk_size;
-            }
-            let remainder = size % chunk_size;
-            tensors.push(Self::narrow(self.clone(), dim, sum_chunk_size, remainder));
-        }
-
-        tensors
+        let chunk_size = size.div_ceil(chunks);
+        (0..size)
+            .step_by(chunk_size)
+            .map(|start| {
+                let length = chunk_size.min(size - start);
+                Self::narrow(self.clone(), dim, start, length)
+            })
+            .collect()
     }
 
     /// Splits the tensor into chunks of a specified size along a given dimension.
