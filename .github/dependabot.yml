@@ -13,7 +13,7 @@ updates:
       - "/"
       - "crates/burn"
       - "crates/burn-*"
-      - "crates/burn-import/*-tests"
+      - "crates/burn-store/*-tests"
       - "examples/*"
       - "xtask"
     schedule:
