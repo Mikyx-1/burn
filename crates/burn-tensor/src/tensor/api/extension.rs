@@ -32,9 +32,12 @@ where
     ///
     /// # Panics
     ///
-    /// Panics if the [`BridgeTensor`] variant does not match the tensor kind `K`
+    /// Panics if the bridge tensor rank does not match `D`, or if the [`BridgeTensor`] variant does not match the tensor kind `K`
     /// (e.g. passing an int [`BridgeTensor`] when `K` is [`Float`](crate::Float).
     pub fn from_bridge(tensor: BridgeTensor) -> Self {
+        let rank = tensor.shape().num_dims();
+        assert_eq!(rank, D, "Expected tensor rank {D}, got {rank}");
+
         let dtype = tensor.dtype();
         match (tensor.kind(), K::KIND) {
             (BridgeKind::Bool, Kind::Bool) if dtype.is_bool() => Self::new(tensor),
@@ -50,8 +53,11 @@ where
     /// Converts from a dispatch tensor into a tensor.
     ///
     /// # Panics
-    /// Panics if the dispatch dtype does not match the tensor kind `K`.
+    /// Panics if the dispatch tensor rank does not match `D`, or if its dtype does not match the tensor kind `K`.
     pub fn from_dispatch(tensor: DispatchTensor) -> Self {
+        let rank = tensor.shape().num_dims();
+        assert_eq!(rank, D, "Expected tensor rank {D}, got {rank}");
+
         match (tensor.dtype(), K::KIND) {
             (DType::QFloat(_), Kind::Float) => Self::new(BridgeTensor::qfloat(tensor)),
             (dtype, Kind::Float) if dtype.is_float() => Self::new(BridgeTensor::float(tensor)),
@@ -471,5 +477,28 @@ mod tests {
                 "Expected Float primitive, got variant: Int".into()
             )
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "Expected tensor rank 2, got 3")]
+    fn from_bridge_rejects_mismatched_rank() {
+        let bridge = Tensor::<3>::zeros([2, 3, 4], &Default::default()).into_bridge();
+        let _: Tensor<2> = Tensor::from_bridge(bridge);
+    }
+
+    #[test]
+    #[should_panic(expected = "Expected tensor rank 2, got 3")]
+    fn from_dispatch_rejects_mismatched_rank() {
+        let dispatch = Tensor::<3>::zeros([2, 3, 4], &Default::default()).into_dispatch();
+        let _: Tensor<2> = Tensor::from_dispatch(dispatch);
+    }
+
+    #[test]
+    #[should_panic(expected = "Expected tensor rank 2, got 3")]
+    fn from_primitive_rejects_mismatched_rank() {
+        let primitive = Tensor::<3>::zeros([2, 3, 4], &Default::default())
+            .try_into_primitive::<TestBackend>()
+            .unwrap();
+        let _: Tensor<2> = Tensor::from_primitive::<TestBackend>(primitive);
     }
 }

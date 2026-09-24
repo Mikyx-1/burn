@@ -809,8 +809,10 @@ where
     ) -> Self {
         // Use the given dtype when provided, otherwise default device dtype
         let opt = options.into();
+        let shape = shape.into();
         let dtype = opt.resolve_dtype::<K>();
-        Self::new(K::random(shape.into(), distribution, &opt.device, dtype))
+        check!(TensorCheck::creation_ops::<D>("Random", &shape));
+        Self::new(K::random(shape, distribution, &opt.device, dtype))
     }
 
     /// Applies the matrix multiplication operation.

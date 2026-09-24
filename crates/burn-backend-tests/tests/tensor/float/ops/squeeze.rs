@@ -261,3 +261,10 @@ fn squeeze_dims_all_singleton_not_supported() {
     let tensor = TestTensor::<3>::ones(Shape::new([1, 1, 1]), &Default::default());
     let _ = tensor.squeeze_dims::<0>(&[0, 1, 2]);
 }
+
+#[test]
+#[should_panic(expected = "The destination rank must be 2, got 3")]
+fn squeeze_rejects_invalid_rank() {
+    let tensor = TestTensor::<3>::ones(Shape::new([2, 1, 4]), &Default::default());
+    let _: TestTensor<3> = tensor.squeeze_dim(1);
+}

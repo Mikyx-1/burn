@@ -1,5 +1,5 @@
 use super::*;
-use burn_tensor::{Device, Distribution, ElementConversion, TensorData, Tolerance};
+use burn_tensor::{Device, Distribution, ElementConversion, Shape, TensorData, Tolerance};
 
 #[test]
 fn rand_default() {
@@ -50,4 +50,14 @@ fn test_seed_reproducibility() {
 
     t1.into_data()
         .assert_approx_eq::<FloatElem>(&t2.into_data(), Tolerance::default());
+}
+
+#[test]
+#[should_panic(expected = "Given dimensions differ from the tensor rank")]
+fn random_rejects_invalid_rank() {
+    let _: TestTensor<2> = TestTensor::random(
+        Shape::new([2, 3, 4]),
+        Distribution::Default,
+        &Default::default(),
+    );
 }

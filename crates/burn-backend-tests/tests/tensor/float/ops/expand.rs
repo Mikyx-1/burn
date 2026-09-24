@@ -1,5 +1,5 @@
 use super::*;
-use burn_tensor::TensorData;
+use burn_tensor::{Shape, TensorData};
 
 #[test]
 fn expand_2d() {
@@ -135,4 +135,18 @@ fn expand_after_narrow() {
     output
         .into_data()
         .assert_eq(&TensorData::from([[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]]), false);
+}
+
+#[test]
+#[should_panic(expected = "Expand target rank must match the destination tensor rank")]
+fn expand_rejects_invalid_rank() {
+    let tensor = TestTensor::<2>::ones([1, 3], &Default::default());
+    let _: TestTensor<2> = tensor.expand(Shape::new([2, 1, 3]));
+}
+
+#[test]
+#[should_panic(expected = "Expand cannot reduce tensor rank from 2 to 1")]
+fn expand_rejects_invalid_rank_reduction() {
+    let tensor = TestTensor::<2>::ones([1, 3], &Default::default());
+    let _: TestTensor<1> = tensor.expand(Shape::new([3]));
 }
