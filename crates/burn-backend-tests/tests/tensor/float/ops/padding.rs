@@ -545,3 +545,10 @@ fn padding_too_many_pairs_panics_test() {
     // 3 pairs for a 2D tensor should panic
     let _ = tensor.pad([(1, 1), (1, 1), (1, 1)], 0.0);
 }
+
+#[test]
+#[should_panic(expected = "Four-sided padding requires a tensor rank of at least 2, got 1")]
+fn four_sided_padding_rejects_rank_one_tensor() {
+    let tensor = TestTensor::<1>::from([1.0, 2.0, 3.0]);
+    let _ = tensor.pad((1, 1, 1, 1), PadMode::Constant(0.0));
+}

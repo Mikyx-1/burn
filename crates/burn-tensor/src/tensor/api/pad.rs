@@ -34,6 +34,10 @@ impl<const D: usize, const N: usize> IntoPadding<D> for [(usize, usize); N] {
 /// Equivalent to `[(top, bottom), (left, right)]`.
 impl<const D: usize> IntoPadding<D> for (usize, usize, usize, usize) {
     fn into_padding(self) -> [(usize, usize); D] {
+        assert!(
+            D >= 2,
+            "Four-sided padding requires a tensor rank of at least 2, got {D}"
+        );
         let (left, right, top, bottom) = self;
         let mut result = [(0usize, 0usize); D];
         result[D - 2] = (top, bottom);
@@ -105,6 +109,7 @@ where
     /// # Panics
     ///
     /// - Panics if more padding pairs are provided than tensor dimensions.
+    /// - Four-sided tuple padding panics if the tensor has fewer than two dimensions.
     /// - `Reflect` mode panics if padding exceeds `dimension_size - 1`.
     /// - `Edge` mode panics if padding is applied to a zero-sized dimension.
     ///

@@ -11,7 +11,7 @@ use alloc::vec::Vec;
 ///
 /// # Panics
 ///
-/// Panics if `D2` is not equal to `D+1`.
+/// Panics if `D2` is not equal to `D+1` or if the runtime shape rank does not equal `D`.
 ///
 /// # Examples
 ///
@@ -31,6 +31,12 @@ pub fn cartesian_grid<S: Into<Shape>, const D: usize, const D2: usize>(
     }
 
     let dims = shape.into();
+    assert_eq!(
+        dims.num_dims(),
+        D,
+        "Cartesian grid shape rank must be {D}, got {}",
+        dims.num_dims()
+    );
     let mut indices: Vec<Tensor<D, Int>> = Vec::new();
 
     for dim in 0..D {

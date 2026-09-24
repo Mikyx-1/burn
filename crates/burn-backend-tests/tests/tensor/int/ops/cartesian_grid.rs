@@ -1,5 +1,5 @@
 use super::*;
-use burn_tensor::TensorData;
+use burn_tensor::{Shape, TensorData};
 
 #[test]
 fn test_cartesian_grid() {
@@ -17,4 +17,18 @@ fn test_cartesian_grid() {
         &TensorData::from([[[0, 0], [0, 1]], [[1, 0], [1, 1]]]),
         false,
     );
+}
+
+#[test]
+#[should_panic(expected = "Cartesian grid shape rank must be 2, got 1")]
+fn cartesian_grid_rejects_too_few_runtime_dimensions() {
+    let device = Default::default();
+    let _: TestTensorInt<3> = TestTensorInt::<2>::cartesian_grid(Shape::new([2]), &device);
+}
+
+#[test]
+#[should_panic(expected = "Cartesian grid shape rank must be 2, got 3")]
+fn cartesian_grid_rejects_too_many_runtime_dimensions() {
+    let device = Default::default();
+    let _: TestTensorInt<3> = TestTensorInt::<2>::cartesian_grid(Shape::new([2, 3, 4]), &device);
 }
