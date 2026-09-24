@@ -16,7 +16,7 @@
 if ! command -v python3 &> /dev/null
 then
     echo "python3 could not be found. Running server requires python3."
-    exit
+    exit 1
 fi
 
 echo "Running local python HTTP server on port 8000 ..."
