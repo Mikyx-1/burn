@@ -136,7 +136,7 @@ fn int_to_float_impl(p: BridgeTensor, dtype: FloatDType) -> BridgeTensor {
 }
 
 fn bool_cast_to_int_impl(p: BridgeTensor, dtype: IntDType) -> BridgeTensor {
-    BridgeTensor::bool(Dispatch::bool_into_int(p.into(), dtype))
+    BridgeTensor::int(Dispatch::bool_into_int(p.into(), dtype))
 }
 
 fn bool_cast_to_float_impl(p: BridgeTensor, dtype: FloatDType) -> BridgeTensor {
