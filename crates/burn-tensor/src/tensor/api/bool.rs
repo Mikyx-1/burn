@@ -1,5 +1,5 @@
 use crate::{Bool, Cast, Device, Int, Shape, Tensor, TensorData, ops::BridgeTensor};
-use alloc::{vec, vec::Vec};
+use alloc::vec::Vec;
 use burn_backend::ops::BoolTensorOps;
 use burn_dispatch::Dispatch;
 
@@ -205,7 +205,8 @@ impl<const D: usize> Tensor<D, Bool> {
     /// # Returns
     ///
     /// A vector of tensors, one for each dimension of the given tensor, containing the indices of
-    /// the non-zero elements in that dimension.
+    /// the non-zero elements in that dimension. Each tensor has shape `[N]`, including `[0]`
+    /// when no elements are true.
     ///
     /// # Example
     ///
@@ -231,16 +232,19 @@ impl<const D: usize> Tensor<D, Bool> {
     /// # Returns
     ///
     /// A vector of tensors, one for each dimension of the given tensor, containing the indices of
-    /// the non-zero elements in that dimension.
+    /// the non-zero elements in that dimension. Each tensor has shape `[N]`, including `[0]`
+    /// when no elements are true.
     pub async fn nonzero_async(self) -> Vec<Tensor<1, Int>> {
         let indices = self.argwhere_async().await;
-
-        if indices.shape().num_elements() == 0 {
-            // Return empty vec when all elements are zero
-            return vec![];
-        }
-
         let dims = indices.shape();
+
+        if dims[0] == 0 {
+            let device = indices.device();
+            let dtype = indices.dtype();
+            return (0..D)
+                .map(|_| Tensor::empty([0], (&device, dtype)))
+                .collect();
+        }
         indices
             .chunk(dims[1], 1)
             .into_iter()
