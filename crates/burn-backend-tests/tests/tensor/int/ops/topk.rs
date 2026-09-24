@@ -68,6 +68,16 @@ fn test_argtopk_1d() {
 }
 
 #[test]
+fn test_argtopk_supports_k_dim_size() {
+    let tensor = TestTensorInt::<1>::from([3, 1, 5, 2, 4]);
+
+    let indices = tensor.argtopk(5, 0);
+
+    let expected = TensorData::from([2, 4, 0, 3, 1]);
+    indices.into_data().assert_eq(&expected, false);
+}
+
+#[test]
 fn test_argtopk() {
     let tensor = TestTensorInt::<3>::from([[[1, 4, 7], [2, 5, 6]], [[3, 0, 9], [8, 2, 7]]]);
 
