@@ -22,8 +22,9 @@ pub(crate) struct RecordTensor {
 /// originating `param_id`) plus a few typed scalar entries kept in the burnpack scalar map.
 ///
 /// Obtain one from a [`ModuleOptimizer`](crate::optim::ModuleOptimizer) with
-/// [`to_record`](crate::optim::ModuleOptimizer::to_record), then save it
-/// ([`save`](Self::save) / [`into_bytes`](Self::into_bytes)) or apply it back with
+/// [`to_record`](crate::optim::ModuleOptimizer::to_record), then serialize it with
+/// [`into_bytes`](Self::into_bytes) (or `save` when the `std` feature is enabled), or apply it
+/// back with
 /// [`load_record`](crate::optim::ModuleOptimizer::load_record).
 #[derive(Default)]
 pub struct OptimizerRecord {

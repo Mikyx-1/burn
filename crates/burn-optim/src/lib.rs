@@ -17,7 +17,6 @@ pub use optim::*;
 pub mod grad_clipping;
 
 /// Learning rate scheduler module.
-#[cfg(feature = "std")]
 pub mod lr_scheduler;
 
 /// Type alias for the learning rate.

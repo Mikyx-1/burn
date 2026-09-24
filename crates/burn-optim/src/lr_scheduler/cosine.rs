@@ -94,7 +94,7 @@ impl LrScheduler for CosineAnnealingLrScheduler {
             + 0.5
                 * (self.max_lr - self.min_lr)
                 * (1.0
-                    + (self.current_iter as f64 / self.num_iters as f64 * std::f64::consts::PI)
+                    + (self.current_iter as f64 / self.num_iters as f64 * core::f64::consts::PI)
                         .cos())
     }
 

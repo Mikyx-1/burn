@@ -920,7 +920,6 @@ mod tests {
             }
             let (f_init, g_init) = func(&x, 0.0, &d);
             let gtd_init = g_init.clone().dot(d.clone()).into_scalar::<f64>();
-            println!("Initial State: f={},gtd = {}", f_init, gtd_init);
             assert!((f_init - 13.7080059052).abs() < tol);
             assert!((gtd_init - 28.5305728912).abs() < tol);
             let mut obj_func = |xb: &Tensor<1>, tv: f64, dv: &Tensor<1>| func(xb, tv, dv);
@@ -939,10 +938,6 @@ mod tests {
                 10,   // max_ls
             );
             let g_f = _g_final.into_scalar::<f64>();
-            println!(
-                "f_final:{:?},_g_final:{:?},t_final:{:?},evals:{:?}",
-                f_final, g_f, t_final, evals
-            );
             assert!((f_final - 13.708005905151367).abs() < tol);
             assert!((g_f - 31.2450428009).abs() < tol);
             assert!((t_final - 0.0).abs() < tol);
