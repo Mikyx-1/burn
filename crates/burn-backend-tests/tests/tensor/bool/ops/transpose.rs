@@ -39,3 +39,14 @@ fn should_support_swap_dims_bool() {
 
     output.into_data().assert_eq(&expected, false);
 }
+
+#[test]
+fn should_treat_rank_one_transpose_as_no_op_bool() {
+    let tensor = TestTensorBool::<1>::from([true, false, true]);
+
+    let output = tensor.transpose();
+
+    output
+        .into_data()
+        .assert_eq(&TensorData::from([true, false, true]), false);
+}
