@@ -70,6 +70,24 @@ fn clamp_min_max() {
 }
 
 #[test]
+fn clamp_equal_bounds() {
+    let tensor = TestTensor::<1>::from([-1.0, 0.0, 1.0]);
+
+    tensor
+        .clamp(0.5, 0.5)
+        .into_data()
+        .assert_eq(&TensorData::from([0.5, 0.5, 0.5]), false);
+}
+
+#[test]
+#[should_panic(expected = "clamp requires min to be less than or equal to max")]
+fn clamp_rejects_reversed_float_bounds() {
+    let tensor = TestTensor::<1>::from([-1.0, 0.0, 1.0]);
+
+    let _ = tensor.clamp(2.0, -2.0);
+}
+
+#[test]
 fn clamp_min_max_vec_should_compile() {
     let input = TestTensor::<2>::ones([2, 4], &Default::default());
     let output = input.clamp(0., 0.5);
@@ -127,9 +145,7 @@ fn clamp_max_nan_bound_propagation() {
     assert!(values.iter().all(|v| v.is_nan()), "{values:?}");
 }
 
-// Two-sided clamp used to panic here, since `f32::clamp` rejects a NaN bound. Both
-// element types, since flex reaches each one through its own closure.
-#[cfg(feature = "flex")]
+// Two-sided clamp defines NaN bounds consistently before backend-specific clamp dispatch.
 #[test]
 fn clamp_nan_bound_propagation() {
     for dtype in [burn_tensor::DType::F32, burn_tensor::DType::F64] {

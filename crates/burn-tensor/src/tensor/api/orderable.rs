@@ -965,6 +965,11 @@ where
     /// # Returns
     ///
     /// A new tensor with the values clamped between the given min and max values.
+    /// If either floating-point bound is NaN, every output value is NaN.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `min` is greater than `max`.
     ///
     /// # Example
     ///
@@ -985,11 +990,27 @@ where
     /// ```
     pub fn clamp<E: ElementConversion>(self, min: E, max: E) -> Self {
         let dtype = self.dtype();
-        Self::new(K::clamp(
-            self.primitive,
-            Scalar::new(min, &dtype),
-            Scalar::new(max, &dtype),
-        ))
+        let min = Scalar::new(min, &dtype);
+        let max = Scalar::new(max, &dtype);
+
+        let bounds_ordered = match (min, max) {
+            (Scalar::Float(min), Scalar::Float(max)) => {
+                if min.is_nan() || max.is_nan() {
+                    return self.mul_scalar(f64::NAN);
+                }
+                min <= max
+            }
+            (Scalar::Int(min), Scalar::Int(max)) => min <= max,
+            (Scalar::UInt(min), Scalar::UInt(max)) => min <= max,
+            (Scalar::Bool(min), Scalar::Bool(max)) => !min || max,
+            _ => unreachable!("clamp bounds must have the tensor dtype"),
+        };
+        assert!(
+            bounds_ordered,
+            "clamp requires min to be less than or equal to max"
+        );
+
+        Self::new(K::clamp(self.primitive, min, max))
     }
 
     /// Clamp element wise under a minimum value.
