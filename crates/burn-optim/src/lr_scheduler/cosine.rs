@@ -31,8 +31,14 @@ pub struct CosineAnnealingLrSchedulerConfig {
 impl CosineAnnealingLrSchedulerConfig {
     /// Initializes a [Cosine learning rate scheduler](CosineAnnealingLrScheduler).
     pub(crate) fn build(&self) -> Result<CosineAnnealingLrScheduler, String> {
+        if !self.initial_lr.is_finite() {
+            return Err("Initial learning rate must be finite".into());
+        }
         if self.initial_lr <= 0. || self.initial_lr > 1. {
             return Err("Initial learning rate must be greater than 0 and at most 1".into());
+        }
+        if !self.min_lr.is_finite() {
+            return Err("Minimum learning rate must be finite".into());
         }
         if self.min_lr < 0.0 || self.min_lr > self.initial_lr {
             return Err(
@@ -209,5 +215,25 @@ mod tests {
             .build()
             .unwrap();
         test_utils::check_save_load(scheduler, NUM_ITERS / 3 * 2);
+    }
+
+    #[test]
+    fn config_rejects_non_finite_learning_rates() {
+        for initial_lr in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let error = CosineAnnealingLrSchedulerConfig::new(initial_lr, 10)
+                .build()
+                .err()
+                .unwrap();
+            assert_eq!(error, "Initial learning rate must be finite");
+        }
+
+        for min_lr in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let error = CosineAnnealingLrSchedulerConfig::new(0.5, 10)
+                .with_min_lr(min_lr)
+                .build()
+                .err()
+                .unwrap();
+            assert_eq!(error, "Minimum learning rate must be finite");
+        }
     }
 }

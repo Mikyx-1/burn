@@ -42,6 +42,10 @@ pub enum SchedulerReduction {
 impl ComposedLrSchedulerConfig {
     /// Initialize the learning rate scheduler.
     pub(crate) fn build(&self) -> Result<ComposedLrScheduler, String> {
+        if self.schedulers.is_empty() {
+            return Err("At least one scheduler is required".into());
+        }
+
         let mut schedulers: Vec<DynLrScheduler> = Vec::with_capacity(self.schedulers.len());
         for config in self.schedulers.iter() {
             schedulers.push(config.build()?);
@@ -54,6 +58,10 @@ impl ComposedLrSchedulerConfig {
     }
 
     /// Initializes a [module learning rate scheduler](ModuleLrScheduler).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when no schedulers are configured or when a child configuration is invalid.
     pub fn init(&self) -> Result<ModuleLrScheduler, String> {
         self.build().map(|s| s.into())
     }
@@ -149,5 +157,42 @@ impl LrScheduler for ComposedLrScheduler {
                 item.clone().load_record(sub)
             })
             .collect();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_empty_compositions_for_all_reductions() {
+        for reduction in [
+            SchedulerReduction::Avg,
+            SchedulerReduction::Sum,
+            SchedulerReduction::Prod,
+        ] {
+            let error = ComposedLrSchedulerConfig::new()
+                .with_reduction(reduction)
+                .build()
+                .err()
+                .unwrap();
+            assert_eq!(error, "At least one scheduler is required");
+        }
+    }
+
+    #[test]
+    fn accepts_nonempty_compositions_for_all_reductions() {
+        for reduction in [
+            SchedulerReduction::Avg,
+            SchedulerReduction::Sum,
+            SchedulerReduction::Prod,
+        ] {
+            let mut scheduler = ComposedLrSchedulerConfig::new()
+                .with_reduction(reduction)
+                .constant(0.5)
+                .build()
+                .unwrap();
+            assert_eq!(scheduler.step(), 0.5);
+        }
     }
 }

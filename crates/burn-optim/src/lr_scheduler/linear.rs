@@ -25,8 +25,14 @@ pub struct LinearLrSchedulerConfig {
 impl LinearLrSchedulerConfig {
     /// Initializes a [linear learning rate scheduler](LinearLrScheduler).
     pub(crate) fn build(&self) -> Result<LinearLrScheduler, String> {
+        if !self.initial_lr.is_finite() {
+            return Err("Initial learning rate must be finite".into());
+        }
         if self.initial_lr <= 0. || self.initial_lr > 1. {
             return Err("Initial learning rate must be greater than 0 and at most 1".into());
+        }
+        if !self.final_lr.is_finite() {
+            return Err("Final learning rate must be finite".into());
         }
         if self.final_lr < 0. || self.final_lr > 1. {
             return Err("Final learning rate must be at least 0 and at most 1".into());
@@ -35,10 +41,15 @@ impl LinearLrSchedulerConfig {
             return Err("Number of iterations must be at least 1".into());
         }
 
+        let remaining_iters = self
+            .num_iters
+            .checked_add(1)
+            .ok_or_else(|| String::from("Number of iterations must be less than usize::MAX"))?;
+
         Ok(LinearLrScheduler {
             final_lr: self.final_lr,
             step_size: (self.final_lr - self.initial_lr) / self.num_iters as f64,
-            remaining_iters: self.num_iters + 1,
+            remaining_iters,
         })
     }
 
@@ -50,7 +61,7 @@ impl LinearLrSchedulerConfig {
     ///
     /// * `initial_lr` is out of range (0.0, 1.0]
     /// * `final_lr` is out of range [0.0, 1.0]
-    /// * `num_iters` is 0
+    /// * `num_iters` is 0 or `usize::MAX`
     pub fn init(&self) -> Result<ModuleLrScheduler, String> {
         self.build().map(|s| s.into())
     }
@@ -182,5 +193,42 @@ mod tests {
             .build()
             .unwrap();
         test_utils::check_save_load(scheduler, NUM_ITERS / 3 * 2);
+    }
+
+    #[test]
+    fn config_rejects_non_finite_learning_rates() {
+        for initial_lr in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let error = LinearLrSchedulerConfig::new(initial_lr, 0.5, 100)
+                .build()
+                .err()
+                .unwrap();
+            assert_eq!(error, "Initial learning rate must be finite");
+        }
+
+        for final_lr in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let error = LinearLrSchedulerConfig::new(0.5, final_lr, 100)
+                .build()
+                .err()
+                .unwrap();
+            assert_eq!(error, "Final learning rate must be finite");
+        }
+    }
+
+    #[test]
+    fn config_rejects_overflowing_num_iters() {
+        let error = LinearLrSchedulerConfig::new(0.5, 0.1, usize::MAX)
+            .build()
+            .err()
+            .unwrap();
+        assert_eq!(error, "Number of iterations must be less than usize::MAX");
+    }
+
+    #[test]
+    fn config_accepts_largest_supported_num_iters() {
+        assert!(
+            LinearLrSchedulerConfig::new(0.5, 0.1, usize::MAX - 1)
+                .build()
+                .is_ok()
+        );
     }
 }
