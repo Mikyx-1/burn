@@ -244,9 +244,8 @@ mod tests {
         let num_pairs = reduce(valid.clone());
         let correct_pairs = reduce(si.clone().greater(sj.clone()).float() * valid.clone());
         let tied_pairs = reduce(si.equal(sj).float() * valid);
-        ((correct_pairs + 0.5 * tied_pairs) / num_pairs)
-            .mean()
-            .into_scalar()
+        let auc: Tensor<1> = (correct_pairs + 0.5 * tied_pairs) / num_pairs;
+        auc.mean().into_scalar()
     }
 
     #[test]
