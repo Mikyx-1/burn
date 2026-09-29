@@ -218,6 +218,60 @@ mod tests {
     use crate::metric::ClassReduction::{self, *};
     use burn_core::tensor::{TensorData, Tolerance};
     use rstest::rstest;
+    use std::time::Instant;
+
+    fn benchmark_input(n: usize) -> (Tensor<2>, Tensor<2, Bool>) {
+        let device = Default::default();
+        let scores: Vec<f32> = (0..n)
+            .map(|i| ((i * 9_973) % n) as f32 / n as f32)
+            .collect();
+        let targets: Vec<i32> = (0..n).map(|i| i32::from(i % 2 == 0)).collect();
+        (
+            Tensor::from_data(TensorData::new(scores, [n, 1]), &device),
+            Tensor::from_data(TensorData::new(targets, [n, 1]), &device),
+        )
+    }
+
+    fn benchmark_pairwise(scores: Tensor<2>, targets: Tensor<2, Bool>) -> f64 {
+        let [n, c] = scores.dims();
+        let targets = targets.float();
+        let si = scores.clone().reshape([n, 1, c]);
+        let sj = scores.reshape([1, n, c]);
+        let yi = targets.clone().reshape([n, 1, c]);
+        let yj = targets.reshape([1, n, c]);
+        let valid: Tensor<3> = yi * (1.0 - yj);
+        let reduce = |t: Tensor<3>| t.sum_dim(0).sum_dim(1).squeeze_dims::<1>(&[0, 1]);
+        let num_pairs = reduce(valid.clone());
+        let correct_pairs = reduce(si.clone().greater(sj.clone()).float() * valid.clone());
+        let tied_pairs = reduce(si.equal(sj).float() * valid);
+        ((correct_pairs + 0.5 * tied_pairs) / num_pairs)
+            .mean()
+            .into_scalar()
+    }
+
+    #[test]
+    #[ignore]
+    fn benchmark_pairwise_auc() {
+        let n: usize = std::env::var("AUROC_BENCH_N").unwrap().parse().unwrap();
+        let (warm_scores, warm_targets) = benchmark_input(128);
+        std::hint::black_box(benchmark_pairwise(warm_scores, warm_targets));
+        let (scores, targets) = benchmark_input(n);
+        let start = Instant::now();
+        let auc = std::hint::black_box(benchmark_pairwise(scores, targets));
+        eprintln!("BENCH pairwise n={n} elapsed_ms={:.3} auc={auc:.8}", start.elapsed().as_secs_f64() * 1000.0);
+    }
+
+    #[test]
+    #[ignore]
+    fn benchmark_sorted_auc() {
+        let n: usize = std::env::var("AUROC_BENCH_N").unwrap().parse().unwrap();
+        let (warm_scores, warm_targets) = benchmark_input(128);
+        std::hint::black_box(AurocMetric::binary().compute_auc(warm_scores, warm_targets));
+        let (scores, targets) = benchmark_input(n);
+        let start = Instant::now();
+        let auc = std::hint::black_box(AurocMetric::binary().compute_auc(scores, targets));
+        eprintln!("BENCH sorted n={n} elapsed_ms={:.3} auc={auc:.8}", start.elapsed().as_secs_f64() * 1000.0);
+    }
 
     /// Inputs and expected AUROC computed with an independent reference
     /// equivalent to scikit-learn's `roc_auc_score` (Mann-Whitney U:

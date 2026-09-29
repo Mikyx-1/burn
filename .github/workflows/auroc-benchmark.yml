@@ -1,0 +1,42 @@
+name: AUROC benchmark
+
+on:
+  push:
+    branches:
+      - bench/auroc-issue180
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: tracel-ai/github-actions/install-rust@v11
+        with:
+          rust-toolchain: stable
+          cache-key: auroc-benchmark-linux
+      - name: Build optimized burn-train tests
+        run: cargo test -p burn-train --lib --release --no-run
+      - name: Measure AUROC latency and peak RSS
+        shell: bash
+        run: |
+          set -euo pipefail
+          bench_bin=$(find target/release/deps -maxdepth 1 -type f -name 'burn_train-*' -executable | head -n 1)
+          test -n "$bench_bin"
+          for n in 512 1024 2048 4096; do
+            for implementation in pairwise sorted; do
+              for trial in 1 2 3; do
+                echo "CASE implementation=$implementation n=$n trial=$trial" | tee -a auroc-benchmark.log
+                AUROC_BENCH_N="$n" /usr/bin/time -v "$bench_bin" "metric::auroc::tests::benchmark_${implementation}_auc" --ignored --exact --nocapture 2>&1 | tee -a auroc-benchmark.log
+              done
+            done
+          done
+          for trial in 1 2 3; do
+            echo "CASE implementation=sorted n=20000 trial=$trial" | tee -a auroc-benchmark.log
+            AUROC_BENCH_N=20000 /usr/bin/time -v "$bench_bin" metric::auroc::tests::benchmark_sorted_auc --ignored --exact --nocapture 2>&1 | tee -a auroc-benchmark.log
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: auroc-benchmark-log
+          path: auroc-benchmark.log
