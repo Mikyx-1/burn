@@ -16,7 +16,7 @@ pub struct BinaryCrossEntropyLossConfig {
 
     /// Create binary cross-entropy with label smoothing according to [When Does Label Smoothing Help?](https://arxiv.org/abs/1906.02629).
     ///
-    /// Hard labels {0, 1} will be changed to `y_smoothed = y(1 - a) + a / num_classes`.
+    /// Hard labels {0, 1} will be changed to `y_smoothed = y(1 - a) + a / 2`.
     /// Alpha = 0 would be the same as default.
     pub smoothing: Option<f32>,
 
@@ -104,8 +104,7 @@ impl BinaryCrossEntropyLoss {
         let shape = targets.dims();
 
         if let Some(alpha) = self.smoothing {
-            let num_classes = if D > 1 { shape[D - 1] } else { 2 };
-            targets_float = targets_float * (1. - alpha) + alpha / num_classes as f32;
+            targets_float = targets_float * (1. - alpha) + alpha / 2.;
         }
 
         let mut loss = if self.logits {
@@ -143,6 +142,30 @@ impl BinaryCrossEntropyLoss {
             "Shape of targets ({targets_dims:?}) should correspond to outer shape of logits ({logits_dims:?})."
         );
 
+        let targets_valid = targets
+            .clone()
+            .greater_equal_scalar(0)
+            .bool_and(targets.clone().lower_equal_scalar(1))
+            .all()
+            .into_scalar::<bool>();
+        assert!(
+            targets_valid,
+            "All binary cross-entropy targets must be either 0 or 1."
+        );
+
+        if !self.logits {
+            let probabilities_valid = logits
+                .clone()
+                .greater_equal_scalar(0.0)
+                .bool_and(logits.clone().lower_equal_scalar(1.0))
+                .all()
+                .into_scalar::<bool>();
+            assert!(
+                probabilities_valid,
+                "All binary cross-entropy probabilities must be finite and in the range [0, 1]."
+            );
+        }
+
         if let Some(weights) = &self.weights
             && D > 1
         {
@@ -150,7 +173,7 @@ impl BinaryCrossEntropyLoss {
             let weights_classes = weights.dims()[0];
             assert!(
                 weights_classes == targets_classes,
-                "The number of classes ({weights_classes}) does not match the weights provided ({targets_classes})."
+                "The number of classes ({targets_classes}) does not match the weights provided ({weights_classes})."
             );
         }
     }
@@ -161,6 +184,7 @@ mod tests {
     use super::*;
     use burn::tensor::Tolerance;
     use burn::tensor::{TensorData, activation::sigmoid};
+    use rstest::rstest;
     type FT = f32;
 
     #[test]
@@ -191,6 +215,56 @@ mod tests {
 
         let loss_expected = TensorData::from([100.000]); // clamped value
         loss_actual.assert_approx_eq::<FT>(&loss_expected, Tolerance::default());
+    }
+
+    #[rstest]
+    #[case(-0.1)]
+    #[case(1.1)]
+    #[case(f32::NAN)]
+    #[case(f32::INFINITY)]
+    #[should_panic(
+        expected = "All binary cross-entropy probabilities must be finite and in the range [0, 1]."
+    )]
+    fn invalid_probability_should_panic(#[case] probability: f32) {
+        let device = Default::default();
+        let probabilities = Tensor::<1>::from_floats([0.5, probability], &device);
+        let targets = Tensor::<1, Int>::from_data(TensorData::from([0, 1]), &device);
+
+        BinaryCrossEntropyLossConfig::new()
+            .init(&device)
+            .forward(probabilities, targets);
+    }
+
+    #[rstest]
+    #[case(false, -1)]
+    #[case(false, 2)]
+    #[case(true, -1)]
+    #[case(true, 2)]
+    #[should_panic(expected = "All binary cross-entropy targets must be either 0 or 1.")]
+    fn invalid_target_should_panic(#[case] logits: bool, #[case] target: i64) {
+        let device = Default::default();
+        let input = Tensor::<1>::from_floats([0.5, 0.5], &device);
+        let targets = Tensor::<1, Int>::from_data(TensorData::from([0, target]), &device);
+
+        BinaryCrossEntropyLossConfig::new()
+            .with_logits(logits)
+            .init(&device)
+            .forward(input, targets);
+    }
+
+    #[test]
+    fn logits_mode_accepts_values_outside_probability_range() {
+        let device = Default::default();
+        let logits = Tensor::<1>::from_floats([-100.0, 100.0], &device);
+        let targets = Tensor::<1, Int>::from_data(TensorData::from([0, 1]), &device);
+
+        let loss = BinaryCrossEntropyLossConfig::new()
+            .with_logits(true)
+            .init(&device)
+            .forward(logits, targets)
+            .into_scalar::<FT>();
+
+        assert!(loss.is_finite());
     }
 
     #[test]
@@ -284,6 +358,26 @@ mod tests {
     }
 
     #[test]
+    fn multilabel_smoothing_is_independent_of_label_count() {
+        let device = Default::default();
+        let loss = BinaryCrossEntropyLossConfig::new()
+            .with_smoothing(Some(0.1))
+            .init(&device);
+        let single_probability = Tensor::<1>::from_floats([0.8], &device);
+        let single_target = Tensor::<1, Int>::from_data(TensorData::from([1]), &device);
+        let multilabel_probabilities = Tensor::<2>::from_floats([[0.8, 0.8, 0.8]], &device);
+        let multilabel_targets =
+            Tensor::<2, Int>::from_data(TensorData::from([[1, 1, 1]]), &device);
+
+        let single_loss = loss.forward(single_probability, single_target);
+        let multilabel_loss = loss.forward(multilabel_probabilities, multilabel_targets);
+
+        single_loss
+            .into_data()
+            .assert_approx_eq::<FT>(&multilabel_loss.into_data(), Tolerance::default());
+    }
+
+    #[test]
     fn test_binary_cross_entropy_multilabel() {
         // import torch
         // from torch import nn
@@ -346,10 +440,10 @@ mod tests {
         // from torch import nn
         // input = torch.tensor([[0.5150, 0.3097, 0.7556], [0.4974, 0.9879, 0.1564]])
         // target = torch.tensor([[1., 0., 1.], [1., 0., 0.]])
-        // target_smooth = target * (1 - 0.1) + (0.1 / 3)
+        // target_smooth = target * (1 - 0.1) + (0.1 / 2)
         // loss = nn.BCELoss()
         // sigmoid = nn.Sigmoid()
-        // out = loss(sigmoid(input), target_smooth) # tensor(0.7228)
+        // out = loss(sigmoid(input), target_smooth) # tensor(0.7138)
 
         let device = Default::default();
         let logits = Tensor::<2>::from_floats(
@@ -365,12 +459,12 @@ mod tests {
             .forward(sigmoid(logits), targets)
             .into_data();
 
-        let loss_expected = TensorData::from([0.7228]);
+        let loss_expected = TensorData::from([0.71384]);
         loss_actual.assert_approx_eq::<FT>(&loss_expected, Tolerance::default());
     }
 
     #[test]
-    #[should_panic = "The number of classes"]
+    #[should_panic(expected = "The number of classes (3) does not match the weights provided (2).")]
     fn multilabel_weights_should_match_target() {
         // import torch
         // from torch import nn
