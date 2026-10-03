@@ -4,7 +4,7 @@ use burn::config::Config;
 use burn::module::{Content, DisplaySettings, Module, ModuleDisplay};
 use burn::tensor::Tensor;
 
-use super::Reduction;
+use super::{Reduction, assert_binary_float_targets};
 
 /// Configuration to create a [Hinge Embedding loss](HingeEmbeddingLoss) using the
 /// [init function](HingeEmbeddingLossConfig::init).
@@ -92,6 +92,8 @@ impl HingeEmbeddingLoss {
         input: Tensor<D>,
         target: Tensor<D>,
     ) -> Tensor<D> {
+        assert_binary_float_targets(&target);
+
         // y == 1  -> x ;  y == -1 -> max(0, margin - x)
         let negative = input.clone().neg().add_scalar(self.margin).clamp_min(0.0);
         let positive_mask = target.equal_scalar(1);
@@ -128,6 +130,30 @@ mod tests {
             .assert_approx_eq::<FT>(&TensorData::from([0.166_667]), Tolerance::default());
         sum.into_data()
             .assert_approx_eq::<FT>(&TensorData::from([0.5]), Tolerance::default());
+    }
+
+    #[test]
+    #[should_panic(expected = "All target values must be either -1 or 1.")]
+    fn invalid_target_value_should_panic() {
+        let device = Default::default();
+        let input = Tensor::<1>::zeros([2], &device);
+        let target = Tensor::<1>::from_data(TensorData::from([1.0, 0.0]), &device);
+
+        HingeEmbeddingLossConfig::new()
+            .init()
+            .forward_no_reduction(input, target);
+    }
+
+    #[test]
+    #[should_panic(expected = "All target values must be either -1 or 1.")]
+    fn nan_target_value_should_panic() {
+        let device = Default::default();
+        let input = Tensor::<1>::zeros([2], &device);
+        let target = Tensor::<1>::from_data(TensorData::from([1.0, f32::NAN]), &device);
+
+        HingeEmbeddingLossConfig::new()
+            .init()
+            .forward_no_reduction(input, target);
     }
 
     #[test]

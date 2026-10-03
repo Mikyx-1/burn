@@ -5,7 +5,7 @@ use burn::tensor::Tensor;
 use burn::tensor::activation::relu;
 use burn::{config::Config, module::Module};
 
-use super::Reduction;
+use super::{Reduction, assert_binary_float_targets};
 
 /// Configuration to create a [Margin Ranking loss](MarginRankingLoss).
 #[derive(Config, Debug)]
@@ -103,6 +103,8 @@ impl MarginRankingLoss {
         second: Tensor<D>,
         target: Tensor<D>,
     ) -> Tensor<D> {
+        assert_binary_float_targets(&target);
+
         // -y * (x1 - x2) + margin, then clamp negatives to zero via relu.
         let scaled = target.mul(first - second).neg().add_scalar(self.margin);
         relu(scaled)
@@ -147,6 +149,32 @@ mod tests {
         let expected = TensorData::from([3.0]);
         sum.into_data()
             .assert_approx_eq::<FT>(&expected, Tolerance::default());
+    }
+
+    #[test]
+    #[should_panic(expected = "All target values must be either -1 or 1.")]
+    fn invalid_target_value_should_panic() {
+        let device = Default::default();
+        let first = Tensor::<1>::zeros([2], &device);
+        let second = Tensor::<1>::zeros([2], &device);
+        let target = Tensor::<1>::from_data(TensorData::from([1.0, 0.0]), &device);
+
+        MarginRankingLossConfig::new()
+            .init()
+            .forward_no_reduction(first, second, target);
+    }
+
+    #[test]
+    #[should_panic(expected = "All target values must be either -1 or 1.")]
+    fn nan_target_value_should_panic() {
+        let device = Default::default();
+        let first = Tensor::<1>::zeros([2], &device);
+        let second = Tensor::<1>::zeros([2], &device);
+        let target = Tensor::<1>::from_data(TensorData::from([1.0, f32::NAN]), &device);
+
+        MarginRankingLossConfig::new()
+            .init()
+            .forward_no_reduction(first, second, target);
     }
 
     #[test]
