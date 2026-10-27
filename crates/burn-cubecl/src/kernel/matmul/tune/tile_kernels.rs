@@ -1,11 +1,15 @@
 //! Matmul autotune over cubek's tile-DSL routines alone ([`cubek::matmul::kernels`]): what the
-//! `tile-kernels-only` feature races instead of the multi-level candidates. A product none of
-//! them serves fails rather than falling back, so a test run lists what they don't serve yet.
+//! `tile-kernels-only` feature races instead of the multi-level candidates. A product no routine
+//! serves fails rather than falling back, so a test run lists what they don't serve yet.
 
-use crate::{CubeTuneId, kernel::matmul::utils::init_matmul_output, tensor::CubeTensor};
+use crate::{
+    CubeTuneId, kernel::matmul::utils::init_matmul_output, ops::swap_dims, tensor::CubeTensor,
+};
 use burn_backend::DType;
 use burn_backend::cubecl::dtype_to_storage_type;
-use cubecl::tune::{LocalTuner, Tunable, TunableSet, TuneGroup, local_tuner};
+use cubecl::throughput::MemoryAccess;
+use cubecl::tune::{LocalTuner, Tunable, TunableSet, local_tuner};
+use cubek::matmul::definition::{MatmulCost, MatmulGlobalElems};
 use cubek::matmul::kernels::{
     CubeShuffleMatmulRoutine, CubeStagedMatmulRoutine, HypercubeLastArrivalMatmulRoutine,
     MatmulRoutine, MatmulRoutineCandidate, PlaneShuffleMatmulRoutine, UnitRegistersMatmulRoutine,
@@ -17,12 +21,10 @@ use cubek::matmul::kernels::{
 use cubek::microkernel::matmul::MatmulMicrokernel;
 use cubek::std::{
     Hardware,
-    autotune::{CandidatePriority, priority_of},
+    autotune::{Autotune, Ceiling, GroupPriority, Roofline},
 };
-use std::sync::Arc;
 
 type Inputs = (CubeTensor, CubeTensor, CubeTensor);
-type MatmulTunables = TunableSet<MatmulTuneKey, Inputs, ()>;
 
 /// Executes autotune on matmul operations, over cubek's tile-DSL routines alone.
 pub fn matmul_autotune(
@@ -43,63 +45,88 @@ pub fn matmul_autotune(
     let tune_client = client.clone();
     let tune_id = CubeTuneId::new(&lhs.client, &lhs.device);
     let tunables = TUNER.init(&tune_id, move || {
-        let hw = Hardware::new(
-            tune_client.properties_shared(),
-            tune_client.target_properties(),
-        );
-        let routines = TuneGroup::<MatmulTuneKey>::new("tile-kernels", |_| 0);
-        let set = TunableSet::new(key, |_key: &MatmulTuneKey, (lhs, rhs, out): &Inputs| {
-            (lhs.clone(), rhs.clone(), out.copy())
-        });
-        // Not the relay hypercube routine: its cubes wait on each other.
-        let set = with_routine(set, &routines, PlaneShuffleMatmulRoutine, &hw);
-        let set = with_routine(set, &routines, CubeShuffleMatmulRoutine, &hw);
-        let set = with_routine(set, &routines, UnitWholeKMatmulRoutine, &hw);
-        let set = with_routine(set, &routines, CubeStagedMatmulRoutine, &hw);
-        let set = with_routine(set, &routines, HypercubeLastArrivalMatmulRoutine, &hw);
-        with_routine(set, &routines, UnitRegistersMatmulRoutine, &hw)
+        candidates(&Hardware::from_client(&tune_client))
     });
 
-    TUNER.execute(&tune_id, &client, tunables, (lhs, rhs, output.clone()));
+    TUNER.execute(&tune_id, &client, tunables, run_as((lhs, rhs, output.clone())));
 
     output
 }
 
-/// Every setting `routine` lists on `hw`, each a candidate of `group` placed per key by
-/// [`priority_of`]: a setting compiling the launch an earlier one compiles sits out the round.
-fn with_routine<R, M: MatmulMicrokernel, SM: PartialEq + Clone + 'static>(
-    mut set: MatmulTunables,
-    group: &TuneGroup<MatmulTuneKey>,
-    routine: R,
-    hw: &Hardware,
-) -> MatmulTunables
-where
-    R: MatmulRoutine<M, SM> + Copy + Send + Sync + 'static,
-    R::Settings: Send + Sync,
-{
-    let candidates: Arc<[MatmulRoutineCandidate<R>]> =
-        MatmulRoutineCandidate::list(routine, hw).into();
-    for position in 0..candidates.len() {
-        let (running, ranking, hw) = (candidates.clone(), candidates.clone(), hw.clone());
-        let tunable = Tunable::new(
-            &candidates[position].settings().to_string(),
-            move |(lhs, rhs, out): Inputs| launch(&running[position], &hw, lhs, rhs, out),
-        )
-        .group(group, move |key| {
-            priority_of(&ranking, position, key).map_or(-1, CandidatePriority::get)
-        });
-        set = set.with(tunable);
+/// The product the routines run for `lhs · rhs` into `out`: itself, or, where it writes a single
+/// column, its transpose `(rhsᵀ · lhsᵀ)ᵀ`, the same buffers viewed through swapped strides.
+///
+/// The routines cut the output's columns into blocks a cube or a unit covers, so a single column
+/// leaves almost every lane of a block idle, and nothing reads the long lhs faster than its
+/// rows; transposed, the product is one row against a long rhs, which the routines that hold
+/// every row whole stream at the bus. The output of one column stays contiguous transposed; a
+/// wider one would be written across its strides, so it runs as it is.
+fn run_as((lhs, rhs, out): Inputs) -> Inputs {
+    let rank = out.meta.num_dims();
+    let (rows, columns) = (out.meta.shape()[rank - 2], out.meta.shape()[rank - 1]);
+    if columns != 1 || rows == 1 {
+        return (lhs, rhs, out);
     }
-    set
+    let transposed = |tensor: CubeTensor| {
+        let rank = tensor.meta.num_dims();
+        swap_dims(tensor, rank - 2, rank - 1)
+    };
+    (transposed(rhs), transposed(lhs), transposed(out))
+}
+
+/// Every routine's settings in one group, all of them raced in one round, and the unit routine's
+/// lead under them, which serves any product on any device. Not the relay hypercube routine: its
+/// cubes wait on each other.
+///
+/// The round tries the candidates in the order their cubes suit the problem, and stops at the
+/// first one close enough to the problem's roofline ([`roofline`]), as the multi-level autotune's
+/// does: the candidates after it are never compiled.
+fn candidates(hw: &Hardware) -> TunableSet<MatmulTuneKey, Inputs, ()> {
+    let mut autotune = Autotune::new(key).bounded(roofline);
+    let routines = autotune.group("tile-kernels", GroupPriority::DEFAULT);
+    let lead = MatmulRoutineCandidate::list(UnitRegistersMatmulRoutine, hw).swap_remove(0);
+    autotune
+        .prioritized(
+            &routines,
+            MatmulRoutineCandidate::list(PlaneShuffleMatmulRoutine, hw),
+            launch,
+        )
+        .prioritized(
+            &routines,
+            MatmulRoutineCandidate::list(CubeShuffleMatmulRoutine, hw),
+            launch,
+        )
+        .prioritized(
+            &routines,
+            MatmulRoutineCandidate::list(UnitWholeKMatmulRoutine, hw),
+            launch,
+        )
+        .prioritized(
+            &routines,
+            MatmulRoutineCandidate::list(CubeStagedMatmulRoutine, hw),
+            launch,
+        )
+        .prioritized(
+            &routines,
+            MatmulRoutineCandidate::list(HypercubeLastArrivalMatmulRoutine, hw),
+            launch,
+        )
+        .prioritized(
+            &routines,
+            MatmulRoutineCandidate::list(UnitRegistersMatmulRoutine, hw),
+            launch,
+        )
+        .floor(Tunable::new(
+            "unit-registers-lead",
+            move |inputs: Inputs| launch(&lead, inputs),
+        ))
+        .finish()
 }
 
 /// `lhs · rhs` written into `out` by `candidate`'s routine at its setting, or why it did not run.
 fn launch<R, M: MatmulMicrokernel, SM: PartialEq + Clone + 'static>(
     candidate: &MatmulRoutineCandidate<R>,
-    hw: &Hardware,
-    lhs: CubeTensor,
-    rhs: CubeTensor,
-    out: CubeTensor,
+    (lhs, rhs, out): Inputs,
 ) -> Result<(), String>
 where
     R: MatmulRoutine<M, SM> + Copy,
@@ -112,11 +139,38 @@ where
         let elem = dtype_to_storage_type(tensor.dtype);
         PlainTensor::new(tensor.binding(), elem)
     };
-    let settings = candidate.settings();
     candidate
-        .routine()
-        .launch_into(hw, &client, plain(lhs), plain(rhs), plain(out), settings)
-        .map_err(|why| format!("{settings} does not serve this problem: {why:?}"))
+        .launch_into(&client, plain(lhs), plain(rhs), plain(out))
+        .map_err(|why| {
+            let settings = candidate.settings();
+            format!("{settings} does not serve this problem: {why:?}")
+        })
+}
+
+/// What `lhs · rhs` costs at least: its operations against the instruction its elements run on,
+/// and its compulsory bytes against a copy's bandwidth, whichever is slower for the problem.
+fn roofline(_key: &MatmulTuneKey, (lhs, rhs, out): &Inputs) -> Roofline {
+    let (lhs_shape, rhs_shape) = (lhs.meta.shape(), rhs.meta.shape());
+    let rank = lhs_shape.len();
+    let cost = MatmulCost {
+        batches: out.meta.shape()[..rank - 2].iter().product(),
+        m: lhs_shape[rank - 2],
+        k: lhs_shape[rank - 1],
+        n: rhs_shape[rank - 1],
+        elems: MatmulGlobalElems {
+            lhs: dtype_to_storage_type(lhs.dtype),
+            rhs: dtype_to_storage_type(rhs.dtype),
+            out: dtype_to_storage_type(out.dtype),
+        },
+    };
+    Roofline {
+        client: out.client.clone(),
+        ceiling: Ceiling::Either {
+            compute: cost.compute_key(&out.client),
+            memory: MemoryAccess::Copy,
+        },
+        work: cost.work(),
+    }
 }
 
 fn key((lhs, rhs, out): &Inputs) -> MatmulTuneKey {

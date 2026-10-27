@@ -5,6 +5,29 @@ Changes for the next release. For published releases, see
 
 ## Unreleased
 
+### Interpolation coordinate transforms and rounding
+
+Interpolation gains coordinate transforms, nearest rounding modes, crop ROIs and configurable
+cubic coefficients with outside-tap exclusion, allowing ONNX importers to express these Resize
+attributes. Flex implements the extended options, including scale-driven coordinates in forward
+and backward passes. Antialiasing remains unsupported.
+
+**API migration:** `InterpolateOptions::align_corners` is replaced by `coordinate_transform`.
+Use `.with_align_corners(bool)` for bilinear, bicubic and Lanczos3, or
+`.with_coordinate_transform(mode)` for an explicit transform. The alignment builder leaves
+nearest modes unchanged. Read corner alignment with `.align_corners()`.
+
+Explicit scales now affect coordinates as well as output size, so scale-dependent transforms can
+produce different values when `input_size * scale_factor` is nonintegral. To retain mapping based
+on resolved sizes, use `.with_output_size(...)` instead.
+
+Extended combinations require Flex. CubeCL supports the default nearest combinations and
+bilinear, bicubic and Lanczos3 with `AlignCorners` or `HalfPixel` and default cubic options.
+Except with `AlignCorners`, supplied scales must exactly equal the resolved output/input ratios;
+unsupported combinations panic. Flex uses `f64` coordinate arithmetic and preserves half-pixel
+ties when resizing by output size.
+([#6154](https://github.com/tracel-ai/burn/pull/6154), [@Sadik00789](https://github.com/Sadik00789))
+
 ### Device-time instrumentation
 
 `burn-instrument` and `#[compute]` annotations measure device time by model component. Measurement
@@ -23,6 +46,11 @@ Reports also include the measured cost of a kernel launch.
   [CubeCL #1914](https://github.com/tracel-ai/cubecl/pull/1914),
   [CubeCL #1915](https://github.com/tracel-ai/cubecl/pull/1915))
   [@louisfd](https://github.com/louisfd)
+- Reports no longer score a component that is only partly fused, such as a layer projection that
+  ran alone in one layer and fused with the residual add in the others; its row reads
+  `partly fused ↓` instead of a percentage far past the peak. `FusedElsewhere::contains` is replaced
+  by `share`, which returns a `FusedShare`. ([#6222](https://github.com/tracel-ai/burn/pull/6222))
+  [@nathanielsimard](https://github.com/nathanielsimard)
 
 ### Execution performance
 
@@ -179,6 +207,10 @@ loading those checkpoints by filtering to `linear_inner` and `linear_outer`.
 
 #### Modules, losses, and metrics
 
+- Reduce classification metric memory use by storing confusion codes as U8 on devices that support
+  it, retaining the default integer dtype otherwise.
+  ([#6224](https://github.com/tracel-ai/burn/pull/6224))
+  [@Mikyx-1](https://github.com/Mikyx-1)
 - Avoid retaining temporary QR buffers after orthogonal parameter initialization.
   ([#6172](https://github.com/tracel-ai/burn/pull/6172))
   [@EthanAlmloff](https://github.com/EthanAlmloff) [@laggui](https://github.com/laggui)
@@ -214,6 +246,9 @@ loading those checkpoints by filtering to `linear_inner` and `linear_outer`.
   ([#5965](https://github.com/tracel-ai/burn/pull/5965),
   [#5945](https://github.com/tracel-ai/burn/pull/5945),
   [#6028](https://github.com/tracel-ai/burn/pull/6028))
+- Correct BLEU and ROUGE-L scores and prevent panics when prediction and reference sequence lengths
+  differ. ([#6242](https://github.com/tracel-ai/burn/pull/6242))
+  [@onenewcode](https://github.com/onenewcode)
 - Fix CPU non-maximum-suppression results and restore GPU acceleration for connected components.
   ([#6019](https://github.com/tracel-ai/burn/pull/6019),
   [#6003](https://github.com/tracel-ai/burn/pull/6003))
@@ -260,10 +295,15 @@ loading those checkpoints by filtering to `linear_inner` and `linear_outer`.
 
 #### Fusion and correctness fixes
 
+- Return NaN for variance reductions over empty axes instead of panicking or returning zero.
+  ([issue #6236](https://github.com/tracel-ai/burn/issues/6236))
 - Preserve zero-length dimensions in `reshape(Shape)` and `unsqueeze`, and reject mismatched target
   ranks. The array form of `reshape` retains its `0`/`-1` placeholders.
   ([#6112](https://github.com/tracel-ai/burn/pull/6112))
   [@mattisonchao](https://github.com/mattisonchao) [@laggui](https://github.com/laggui)
+- Reject `expand(Shape)` arguments whose rank differs from the output tensor rank, with a clear
+  validation error. ([#6211](https://github.com/tracel-ai/burn/pull/6211))
+  [@onenewcode](https://github.com/onenewcode)
 - Clarify tensor type-mismatch panics with the requested type and guidance to check the rank,
   including gradient lookups.
   ([#5971](https://github.com/tracel-ai/burn/pull/5971)) [@tandede](https://github.com/tandede)
