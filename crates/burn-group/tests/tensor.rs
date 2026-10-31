@@ -146,6 +146,22 @@ fn a_refused_sharding_leaves_the_tensor_as_it_was() {
 }
 
 #[test]
+fn a_tensor_split_while_still_shared_keeps_its_whole_value() {
+    let data = values([4, 6], 1);
+    let tensor = Tensor::<2>::from_data(data.clone(), &group(2));
+
+    let split = tensor.try_with_sharding(Split { dim: 1 }).unwrap();
+
+    assert_eq!(split.sharding(), Some(Split { dim: 1 }));
+    let doubled = Tensor::<2>::from_data(data, &Device::flex())
+        .mul_scalar(2.0)
+        .into_data();
+    (tensor + split)
+        .into_data()
+        .assert_approx_eq::<f32>(&doubled, tolerance());
+}
+
+#[test]
 fn a_tensor_moved_onto_a_group_is_replicated_and_moves_back_whole() {
     let data = values([4, 6], 1);
     let tensor = Tensor::<2>::from_data(data.clone(), &Device::flex()).to_device(&group(2));
@@ -186,6 +202,18 @@ fn a_random_tensor_is_the_same_on_every_member() {
     from_every_member
         .into_data()
         .assert_approx_eq::<f32>(&expected, tolerance());
+}
+
+#[test]
+fn a_random_mask_over_a_split_tensor_is_generated_split() {
+    let device = group(2);
+    let mask = Tensor::<2>::random([4, 6], Distribution::Bernoulli(0.5), &device);
+    let x = Tensor::<2>::ones([4, 6], &device).with_sharding(Split { dim: 1 });
+
+    let _masked = x * mask.clone();
+
+    // Generated whole and copied from member 0, it would still be replicated.
+    assert_eq!(mask.sharding(), Some(Split { dim: 1 }));
 }
 
 #[test]
