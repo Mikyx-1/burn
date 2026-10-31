@@ -1,0 +1,20 @@
+{
+  "recorded_utc": "2026-10-31T10:36:52.012558+00:00",
+  "cpu": "12th Gen Intel(R) Core(TM) i5-12400F",
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+  "base_commit": "79e1a48b51ac23021fe9fc1335d4ab4b1c2b15dc",
+  "one_worker_affinity": "6",
+  "six_worker_affinity": "0,2,4,6,8,10",
+  "features": "std,simd,rayon",
+  "index_dtype": "I32",
+  "rounds_per_policy": 7,
+  "minimum_round_ms": 80,
+  "minimum_round_calls": 3,
+  "heap_repeats": 3,
+  "report_peak_policy": "maximum observed; ranges retained",
+  "warmup": "all workers broadcast,100ms parking,3 complete calls per policy per case",
+  "scope": "direct Flex CTC forward backend call; pre-existing inputs excluded from counted heap",
+  "note": "Public runner module paths are normalized to relative fixture and allocator files. The recorded measurements were not rerun from the relocated package.",
+  "implementation_commit": "04338b610b0b48e0ce07506ef3f24b2990efe230",
+  "upstream_base_commit": "5b95516d6140693f3945520ebaa9a69f96079ffc"
+}
