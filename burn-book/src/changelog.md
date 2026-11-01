@@ -346,6 +346,9 @@ loading those checkpoints by filtering to `linear_inner` and `linear_outer`.
 
 #### Modules, losses, and metrics
 
+- Select an existing epoch when all recorded metric values are infinite or at the floating-point
+  limits, instead of returning an epoch beyond the recorded history.
+  ([#423](https://github.com/Mikyx-1/burn/pull/423)) [@Mikyx-1](https://github.com/Mikyx-1)
 - Reduce classification metric memory use by storing confusion codes as U8 on devices that support
   it, retaining the default integer dtype otherwise.
   ([#6224](https://github.com/tracel-ai/burn/pull/6224))
