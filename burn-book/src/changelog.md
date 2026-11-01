@@ -326,6 +326,7 @@ For example, update custom progress logger implementations:
   [@onenewcode](https://github.com/onenewcode)
 - Correct `PartialDataset` lengths for ranges extending past the source dataset, preventing
   iteration from accessing missing items.
+  ([#422](https://github.com/Mikyx-1/burn/pull/422)) [@Mikyx-1](https://github.com/Mikyx-1)
 
 #### Dataloader prefetch
 
