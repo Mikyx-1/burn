@@ -3,6 +3,8 @@ use std::error::Error;
 use std::{marker::PhantomData, sync::Arc};
 
 /// Only use a fraction of an existing dataset lazily.
+///
+/// The length is limited to the items available from the start index in the source dataset.
 #[derive(new, Clone)]
 pub struct PartialDataset<D, I> {
     dataset: D,
@@ -118,7 +120,10 @@ where
     }
 
     fn len(&self) -> usize {
-        usize::min(self.end_index - self.start_index, self.dataset.len())
+        usize::min(
+            self.end_index - self.start_index,
+            self.dataset.len().saturating_sub(self.start_index),
+        )
     }
 }
 
@@ -205,6 +210,27 @@ mod tests {
         let items = dataset_partial.get_many(requested).unwrap();
 
         assert_eq!(items, expected);
+    }
+
+    #[test]
+    fn test_range_extending_past_source() {
+        let dataset = crate::InMemDataset::new(vec![0, 1, 2, 3, 4]);
+        let partial = PartialDataset::new(dataset, 3, 10);
+
+        assert_eq!(partial.len(), 2);
+        assert_eq!(
+            partial.iter().map(Result::unwrap).collect::<Vec<_>>(),
+            vec![3, 4]
+        );
+    }
+
+    #[test]
+    fn test_range_starting_past_source() {
+        let dataset = crate::InMemDataset::new(vec![0, 1, 2, 3, 4]);
+        let partial = PartialDataset::new(dataset, 6, 10);
+
+        assert!(partial.is_empty());
+        assert!(partial.iter().next().is_none());
     }
 
     #[test]

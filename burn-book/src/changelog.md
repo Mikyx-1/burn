@@ -324,6 +324,8 @@ For example, update custom progress logger implementations:
   lines, invalid UTF-8, or JSON that cannot be deserialized.
   ([#6284](https://github.com/tracel-ai/burn/pull/6284))
   [@onenewcode](https://github.com/onenewcode)
+- Correct `PartialDataset` lengths for ranges extending past the source dataset, preventing
+  iteration from accessing missing items.
 
 #### Dataloader prefetch
 
