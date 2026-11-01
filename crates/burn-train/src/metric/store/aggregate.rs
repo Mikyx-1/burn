@@ -101,9 +101,10 @@ impl NumericMetricsAggregate {
         }
 
         let mut current_value = match &direction {
-            Direction::Lowest => f64::MAX,
-            Direction::Highest => f64::MIN,
+            Direction::Lowest => f64::INFINITY,
+            Direction::Highest => f64::NEG_INFINITY,
         };
+        current_epoch = 1;
 
         for (i, value) in data.into_iter().enumerate() {
             match &direction {
@@ -198,6 +199,50 @@ mod tests {
             .unwrap();
 
         assert_eq!(value, 2);
+    }
+
+    #[rstest::rstest]
+    #[case(Direction::Lowest, [f64::INFINITY; 2], 1)]
+    #[case(Direction::Highest, [f64::NEG_INFINITY; 2], 1)]
+    #[case(Direction::Lowest, [f64::INFINITY, f64::MAX], 2)]
+    #[case(Direction::Highest, [f64::NEG_INFINITY, f64::MIN], 2)]
+    fn should_find_epoch_with_infinite_values(
+        #[case] direction: Direction,
+        #[case] values: [f64; 2],
+        #[case] expected_epoch: usize,
+    ) {
+        let mut logger = InMemoryMetricLogger::default();
+        let mut aggregate = NumericMetricsAggregate::default();
+        let metric_id = MetricId::new(Arc::new(NAME.into()));
+        logger.log_metric_definition(MetricDefinition {
+            metric_id: metric_id.clone(),
+            name: Arc::new(NAME.into()),
+            attributes: crate::metric::MetricAttributes::None,
+            description: None,
+        });
+
+        for (index, value) in values.into_iter().enumerate() {
+            let entry = MetricEntry::new(
+                metric_id.clone(),
+                SerializedEntry::new(value.to_string(), NumericEntry::Final(value).serialize()),
+            );
+            logger.log(
+                MetricsUpdate::new(vec![entry], vec![]),
+                index + 1,
+                &Split::Train,
+            );
+        }
+
+        assert_eq!(
+            aggregate.find_epoch(
+                NAME,
+                &Split::Train,
+                Aggregate::Mean,
+                direction,
+                &mut [Box::new(logger)],
+            ),
+            Some(expected_epoch)
+        );
     }
 
     #[test]
