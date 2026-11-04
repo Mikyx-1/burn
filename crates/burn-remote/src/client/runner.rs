@@ -1,10 +1,12 @@
 use super::{DeviceQueryError, RemoteChannel, RemoteClient, service};
 use crate::shared::{DeviceQueryId, LocalTransferId, TensorRemote, TransferCapability};
 use crate::{PeerAddr, PeerId};
+use burn_backend::RandomKey;
 use burn_backend::{
-    DeviceDescription, DeviceId, DeviceOps, DeviceTelemetry, ExecutionError, ExecutionMode,
-    ExecutionModeToken, ExecutionStatistics, MemoryReport, Peak, PeakError, PeakKey,
-    ProfileDuration, ProfileOptions, ProfileToken, RouterDeviceType, StreamId, TensorData,
+    DeviceDescription, DeviceId, DeviceOps, DeviceTelemetry, EnvironmentBundle, EnvironmentError,
+    EnvironmentId, EnvironmentOrigin, ExecutionError, ExecutionMode, ExecutionModeToken,
+    ExecutionStatistics, MemoryReport, Peak, PeakError, PeakKey, ProfileDuration, ProfileOptions,
+    ProfileToken, RouterDeviceType, StreamId, TensorData,
 };
 use burn_ir::{CapturedGraphId, TensorIr};
 use burn_router::{MultiBackendBridge, RouterClient, RouterTensor, get_client};
@@ -126,6 +128,47 @@ impl RouterClient for RemoteClient {
             .map_err(service_failed)?
     }
 
+    fn environment_create(
+        &self,
+        name: String,
+        origin: EnvironmentOrigin,
+    ) -> Result<EnvironmentId, EnvironmentError> {
+        self.handle
+            .submit_blocking(move |s| s.environment_create(name, origin))
+            .map_err(service_failed)?
+    }
+
+    fn environment_activate(&self, id: EnvironmentId) -> Result<EnvironmentId, EnvironmentError> {
+        let stream_id = StreamId::current();
+        self.handle
+            .submit_blocking(move |s| s.environment_activate(stream_id, id))
+            .map_err(service_failed)?
+    }
+
+    fn environment_active(&self) -> Result<EnvironmentId, EnvironmentError> {
+        self.handle
+            .submit_blocking(|s| s.environment_active())
+            .map_err(service_failed)?
+    }
+
+    fn environment_save(&self, id: EnvironmentId) -> Result<EnvironmentBundle, EnvironmentError> {
+        let stream_id = StreamId::current();
+        self.handle
+            .submit_blocking(move |s| s.environment_save(stream_id, id))
+            .map_err(service_failed)?
+    }
+
+    fn environment_merge(
+        &self,
+        id: EnvironmentId,
+        origin: EnvironmentOrigin,
+    ) -> Result<(), EnvironmentError> {
+        let stream_id = StreamId::current();
+        self.handle
+            .submit_blocking(move |s| s.environment_merge(stream_id, id, origin))
+            .map_err(service_failed)?
+    }
+
     fn device_description(&self) -> Option<DeviceDescription> {
         self.handle
             .submit_blocking(|s| s.device_description())
@@ -183,7 +226,16 @@ impl RouterClient for RemoteClient {
         self.handle.submit(move |s| s.graph_release(graph));
     }
 
+    fn next_random_key(&self) -> RandomKey {
+        use burn_std::rand::RngExt;
+        RandomKey::new(self.rng.lock().unwrap().random())
+    }
+
     fn seed(&self, seed: u64) {
+        use burn_std::rand::SeedableRng;
+        let mut rng = self.rng.lock().unwrap();
+        *rng = burn_std::rand::StdRng::seed_from_u64(seed);
+        // Keep concurrent reseeds in the same order locally and on the server.
         self.handle.submit(move |s| s.seed(seed));
     }
 

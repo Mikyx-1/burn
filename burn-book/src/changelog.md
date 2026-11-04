@@ -5,6 +5,25 @@ Changes for the next release. For published releases, see
 
 ## Unreleased
 
+### Random operation keys
+
+Random operations now reserve a `RandomKey` when requested, before shard, fusion, or remote queues
+execute them. Even a draw dropped before execution consumes one key. Reseeding leaves pending
+draws unchanged, and sharded tensors no longer depend on fusion worker scheduling. Seeded sequences change from previous versions; equality across devices
+or different shardings is not guaranteed.
+
+Backend implementors must provide `Backend::next_random_key` and accept a `RandomKey` in
+`float_random` and `int_random`. Sampling must use only the supplied key, without advancing the
+implicit generator. `Tensor::random` and `random_like` reserve keys at the tensor bridge;
+direct backend callers must supply a key. Use `RandomKey::split` to derive child keys.
+Router clients must also implement `next_random_key`; random-operation IR now carries a key
+scalar, so remote clients and servers must be upgraded together (protocol version 11).
+Remote clients reserve keys locally without waiting for queued service work.
+
+Capture preserves explicit backend keys. Implicit random operations (`Tensor::random` and
+`random_like`) during capture are unsupported and panic; capture does not allocate seeds or
+own a random generator.
+
 ### Interpolation options
 
 **Breaking:** `InterpolateMode` variants now own their coordinate transform and cubic coefficient
@@ -63,10 +82,16 @@ Reports also include the measured cost of a kernel launch.
 
 ### Execution performance
 
-#### Grouped-query attention and causal masks
+#### Grouped-query attention, sliding window and causal masks
 
-Grouped-query attention now works across backends and autodiff, with native CubeCL acceleration.
-Query heads can share fewer key/value heads; invalid head counts are rejected.
+Grouped-query and sliding-window attention now work across backends and autodiff, with native
+CubeCL acceleration. Query heads can share fewer key/value heads; invalid head counts and a
+zero-length sliding window are rejected.
+
+**Breaking:** `AttentionModuleOptions` gains `sliding_window: Option<u32>`. Add
+`sliding_window: None` to struct literals to preserve existing behavior, or use
+`..Default::default()`. The window is always bottom-right aligned; `Some(0)` is rejected, use
+`None` to disable it.
 
 **Breaking:** `AttentionModuleOptions` gains `causal_alignment`. Add
 `causal_alignment: CausalAlignment::BottomRight` to struct literals to preserve existing behavior,
@@ -79,6 +104,11 @@ positions when sequence lengths differ.
 
 #### Kernels
 
+- Autotune CubeCL `sum_dims` between folded reductions and a copy followed by one reduction,
+  including the copy cost. Tuning anchors shapes and strides to reuse plan choices across nearby
+  workloads; Full autotuning keeps exact shapes and strides.
+  ([#6376](https://github.com/tracel-ai/burn/pull/6376))
+  [@EthanAlmloff](https://github.com/EthanAlmloff)
 - Avoid a full-sized gradient copy in CubeCL FP32 `conv2d` bias backward, while retaining
   single-pass accumulation for FP16/BF16 to avoid intermediate overflow.
   ([#6173](https://github.com/tracel-ai/burn/pull/6173))
@@ -95,8 +125,26 @@ positions when sequence lengths differ.
   [#6075](https://github.com/tracel-ai/burn/pull/6075))
 - Speed up Flex CPU F32 `exp`, `sigmoid`, and `softmax` with a SIMD `exp` within 2 ulp of libm, and
   run F32/F64 `round`, `floor`, `ceil`, and `trunc` with SIMD rounding. Flex `round` now returns
-  `-0.0` for `-0.5` on every layout, as IEEE ties-to-even does.
-  ([#6313](https://github.com/tracel-ai/burn/pull/6313)) [@antimora](https://github.com/antimora)
+  `-0.0` for `-0.5` on every layout, as IEEE ties-to-even does. F32 `log`, `tanh`, `erf`, `gelu`,
+  and the GELU backward pass also run with SIMD; `log` matches the `libm` crate bit for bit, `tanh`
+  is within 2 ulp of libm, and `erf` within 1 ulp. F32 `log1p`, `atanh`, `log_sigmoid`, and the
+  log-sigmoid backward pass also run with SIMD; `log1p` and `atanh` match the `libm` crate bit for
+  bit. F32 `sin` and `cos` run with SIMD within 2 ulp of libm, and `tan` within 4; `atan`, `asin`,
+  and `acos` within 3, 2, and 1 ulp. F32 `atan2` (within 3 ulp) and `hypot` (within 1 ulp) run with
+  SIMD on same-shape contiguous operands, and the GELU and log-sigmoid backward passes run in one
+  pass.
+  ([#6313](https://github.com/tracel-ai/burn/pull/6313),
+  [#6341](https://github.com/tracel-ai/burn/pull/6341),
+  [#6345](https://github.com/tracel-ai/burn/pull/6345),
+  [#6347](https://github.com/tracel-ai/burn/pull/6347),
+  [#6352](https://github.com/tracel-ai/burn/pull/6352),
+  [#6353](https://github.com/tracel-ai/burn/pull/6353)) [@antimora](https://github.com/antimora)
+- Add F32 unit-convolution and im2col autotuning candidates on CubeCL backends, including
+  split depthwise weight gradients. Forward im2col limits its column workspace to 128 MiB.
+  ([#6048](https://github.com/tracel-ai/burn/pull/6048)) [@znicelya](https://github.com/znicelya)
+- Speed up Flex CPU `clamp` and `sign` by letting their loops vectorize, and run F32/F64 `powi`
+  with integer exponents other than 0, ±1 and ±2 with SIMD, matching the scalar results bit for
+  bit. ([#6351](https://github.com/tracel-ai/burn/pull/6351)) [@antimora](https://github.com/antimora)
 - Run GELU and sigmoid forward and backward operations in single CubeCL kernels.
   ([#6114](https://github.com/tracel-ai/burn/pull/6114)) [@ssoj13](https://github.com/ssoj13)
 - Allow more CubeCL slices to share their source buffer, avoiding copies of KV-cache prefixes.
@@ -129,6 +177,8 @@ positions when sequence lengths differ.
 
 #### Compilation and autotuning
 
+- Include the preceding `CompileOnly` pass's statistics in the following
+  `CompileAndAutotune` pass on CubeCL backends, so deferred completions appear in its snapshot.
 - Compile autotuning candidates in parallel, including CUDA binary assembly, to reduce startup time.
   ([#5996](https://github.com/tracel-ai/burn/pull/5996),
   [#6074](https://github.com/tracel-ai/burn/pull/6074))
@@ -136,8 +186,10 @@ positions when sequence lengths differ.
   ([#6099](https://github.com/tracel-ai/burn/pull/6099))
 - Share autotuning results across devices with the same hardware. Previously saved per-device
   results are tuned again once. ([#6150](https://github.com/tracel-ai/burn/pull/6150))
-- Avoid excessive kernel compilation for large depthwise-convolution filters.
-  ([#6072](https://github.com/tracel-ai/burn/pull/6072))
+- Avoid excessive kernel compilation for large depthwise-convolution filters, regardless of
+  channel count.
+  ([#6072](https://github.com/tracel-ai/burn/pull/6072),
+  [#6048](https://github.com/tracel-ai/burn/pull/6048))
 - Stop dumping LLVM compiler IR into normal experiment logs, reducing compilation overhead and log
   size. ([#6188](https://github.com/tracel-ai/burn/pull/6188),
   [CubeCL #1895](https://github.com/tracel-ai/cubecl/pull/1895))
@@ -163,8 +215,12 @@ See [runtime configuration](./advanced/runtime-configuration.md#cubek-matmul-pre
 Models can now be split across devices by layer, enabling training and inference with models that
 exceed a single device's memory. The new `LayerParallelism` trait and `DistributedLayeredModel`
 wrapper support sequential execution, transferring activations between devices.
-`LayerPipeline` streams several inference batches through such a model with a thread per stage,
-so the stages overlap. Training schedules and `Learner` integration are not included.
+`InferencePipeline` streams several batches through such a model with a thread per stage, so the
+stages overlap, and `TrainingPipeline` trains it with the GPipe or 1F1B schedule. A signal
+passed between layers derives `AutodiffSignal` to train through. `Learner` integration is not
+included.
+**Breaking:** `LayerParallelism` requires `from_layers`, which rebuilds the model from the
+`LayerSequence` that `into_layers` returns.
 ([#5702](https://github.com/tracel-ai/burn/pull/5702),
 [#6277](https://github.com/tracel-ai/burn/pull/6277))
 [@ThierryCantin-Demers](https://github.com/ThierryCantin-Demers)
@@ -196,16 +252,24 @@ all-to-all, and broadcast also support boolean tensors. Quantized tensors are re
   tensor-parallel decode. ([#6293](https://github.com/tracel-ai/burn/pull/6293))
   [@ThierryCantin-Demers](https://github.com/ThierryCantin-Demers)
 
-#### Device groups
+#### Sharded compute devices
 
-- A tensor made from data on a device group stays on the host until it is used, so `from_data`
+Experimental, behind the `shard` feature: `Device::shard_options(&devices).init()` makes one
+device whose tensors are split over `devices` (crate `burn-shard`).
+
+- A tensor made from data on a sharded compute device stays on the host until it is used, so `from_data`
   followed by `with_sharding` uploads each member only its chunk, and a model that fits only once
   split can be loaded. ([#6232](https://github.com/tracel-ai/burn/pull/6232))
   [@ThierryCantin-Demers](https://github.com/ThierryCantin-Demers)
-- A random tensor on a device group waits until it is first used, and a split use, such as a
+- A random tensor on a sharded compute device waits until it is first used, and a split use, such as a
   dropout mask over a split activation, has each member generate only its shard instead of copying
-  the whole tensor from the first member. Its values follow the order of first use, so they differ
-  from one device's with the same seed. ([#6272](https://github.com/tracel-ai/burn/pull/6272))
+  the whole tensor from the first member. Its seed is captured on creation, and each shard derives its own
+  seed, so its values can differ from one device's with the same seed. ([#6272](https://github.com/tracel-ai/burn/pull/6272))
+  [@ThierryCantin-Demers](https://github.com/ThierryCantin-Demers)
+- Attention split on its batch or heads, and `swap_dims`, `permute`, `expand`, `slice` and
+  `slice_assign` on a sharded compute device keep their input's split instead of gathering it, so a
+  tensor-parallel transformer layer communicates only in its all-reduces.
+  ([#6372](https://github.com/tracel-ai/burn/pull/6372))
   [@ThierryCantin-Demers](https://github.com/ThierryCantin-Demers)
 
 #### Remote execution
@@ -241,7 +305,7 @@ all-to-all, and broadcast also support boolean tensors. Quantized tensors are re
   keeps running. On the client, a lost connection ends the session instead of panicking inside an
   operation: every later `flush`, `sync` and read reports why as a poisoned device
   (`ExecutionError::is_device_poisoned`), and a `to_device` across it yields a tensor whose read
-  reports the same. A group's `flush` reports a member's error instead of holding it for `sync`.
+  reports the same. A sharded compute device's `flush` reports a member's error instead of holding it for `sync`.
   **Breaking:** `RouterClient::flush` returns `Result<(), ExecutionError>`.
   ([#6329](https://github.com/tracel-ai/burn/pull/6329))
 - Servers answer device queries registered with `with_device_query`, asked by
@@ -403,6 +467,9 @@ loading those checkpoints by filtering to `linear_inner` and `linear_outer`.
 - Fix CPU non-maximum-suppression results and restore GPU acceleration for connected components.
   ([#6019](https://github.com/tracel-ai/burn/pull/6019),
   [#6003](https://github.com/tracel-ai/burn/pull/6003))
+- Accept asymmetric padding in `conv3d`, and stop `Conv3d` with `PaddingConfig3d::Same` from
+  panicking when the padding is asymmetric, for example with a stride above 1.
+  ([#4837](https://github.com/tracel-ai/burn/issues/4837), [#6289](https://github.com/tracel-ai/burn/pull/6289))
 
 ### Tensors and backends
 
@@ -554,6 +621,11 @@ with `measure_memory`, and may implement `device_description`, `measure_telemetr
 - Fix CPU and WGPU reads on one stream returning a tensor's old values while another stream's
   in-place write to it was still queued. ([#6332](https://github.com/tracel-ai/burn/pull/6332),
   [CubeCL #2002](https://github.com/tracel-ai/cubecl/pull/2002))
+- Fix in-place CubeCL operations panicking in debug builds on tensors with a zero-sized dimension.
+  ([#6348](https://github.com/tracel-ai/burn/pull/6348))
+- Fix bool `to_device` between backends panicking when the target uses a different bool storage,
+  such as Flex to CUDA or Vulkan. The data now uses the target device's bool storage.
+  ([issue #6389](https://github.com/tracel-ai/burn/issues/6389))
 
 ### Checkpoints and interoperability
 
