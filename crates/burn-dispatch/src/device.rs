@@ -6,10 +6,11 @@ use crate::devices::*;
 #[cfg(feature = "capture")]
 use burn_capture::CaptureDevice;
 #[cfg(feature = "shard")]
-use burn_shard::{ShardError, ShardedComputeDevice};
+use burn_shard::{ShardCustomOps, ShardError, ShardedComputeDevice};
 
 #[cfg(feature = "autodiff")]
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 
 // The capabilities come from `burn-backend` (which takes them from cubecl), so
 // `burn-dispatch` needs no direct `cubecl` dependency.
@@ -391,20 +392,23 @@ impl DispatchDevice {
     /// rest of the process.
     ///
     /// Each of its default dtypes is the first of the members' configured ones, in member order,
-    /// that every member supports.
+    /// that every member supports. Every member runs the handlers of `custom_ops`.
     ///
     /// # Errors
     ///
     /// When `devices` is empty or mixes backends, when they are not Cube or Flex devices, when no
-    /// member's default for a dtype runs on every member, or when the members quantize
-    /// differently. An autodiff sharded compute device is made of plain devices,
-    /// then made autodiff.
+    /// member's default for a dtype runs on every member, when the members quantize
+    /// differently, or when `custom_ops` are another backend's. An autodiff sharded compute device
+    /// is made of plain devices, then made autodiff.
     ///
     /// # Panics
     ///
     /// When the process already has 65,536 sharded compute devices.
     #[cfg(feature = "shard")]
-    pub fn shard(devices: alloc::vec::Vec<DispatchDevice>) -> Result<Self, ShardError> {
+    pub fn shard(
+        devices: alloc::vec::Vec<DispatchDevice>,
+        custom_ops: ShardCustomOps,
+    ) -> Result<Self, ShardError> {
         if let Some(error) = devices.iter().find_map(Self::refused_as_member) {
             return Err(error);
         }
@@ -412,17 +416,46 @@ impl DispatchDevice {
             #[cfg(cube_backend)]
             Some(Self::Cube(_)) => {
                 let members = shard_members!(devices, Cube)?;
-                ShardedComputeDevice::with_member_settings::<crate::backends::Cube>(&members)
+                ShardedComputeDevice::with_member_settings::<crate::backends::Cube>(
+                    &members, custom_ops,
+                )
             }
             #[cfg(feature = "flex")]
             Some(Self::Flex(_)) => {
                 let members = shard_members!(devices, Flex)?;
-                ShardedComputeDevice::with_member_settings::<crate::backends::Flex>(&members)
+                ShardedComputeDevice::with_member_settings::<crate::backends::Flex>(
+                    &members, custom_ops,
+                )
             }
             Some(other) => unreachable!("{other:?} was refused as a member"),
             None => Err(ShardError::NoDevices),
         }?;
         Ok(Self::ShardedCompute(device))
+    }
+
+    /// The members of this sharded compute device, in member order, or `None` when it is not
+    /// one. They are plain devices, an autodiff sharded compute device's included.
+    #[cfg(feature = "shard")]
+    // Without a member backend no members can be read, which leaves `device` unread.
+    #[cfg_attr(not(any(cube_backend, feature = "flex")), allow(unused_variables))]
+    pub fn shard_members(&self) -> Option<alloc::vec::Vec<DispatchDevice>> {
+        match self {
+            Self::ShardedCompute(device) => {
+                #[cfg(cube_backend)]
+                if let Some(members) = device.members::<crate::backends::Cube>() {
+                    return Some(members.into_iter().map(Self::Cube).collect());
+                }
+                #[cfg(feature = "flex")]
+                if let Some(members) = device.members::<crate::backends::Flex>() {
+                    return Some(members.into_iter().map(Self::Flex).collect());
+                }
+                unreachable!("A sharded compute device's members are Cube or Flex devices")
+            }
+            #[cfg(feature = "autodiff")]
+            Self::Autodiff(device) => device.inner.shard_members(),
+            #[allow(unreachable_patterns)]
+            _ => None,
+        }
     }
 
     /// Why this device cannot be a sharded compute device's member, or `None` when it can.
@@ -461,23 +494,36 @@ impl DispatchDevice {
         DispatchDevice::Autodiff(AutodiffDevice::new(device, checkpointing))
     }
 
-    /// The id of the worker this device's fusion server runs on, or `None` when its operations do
-    /// not go through one.
+    /// The ids of the workers this device's fusion servers run on: one for a fused device, one per
+    /// member, in member order, for a sharded compute device whose members fuse, and none when its
+    /// operations do not go through a fusion server.
     ///
-    /// This is the runtime device's own id, not the one this device reports through
+    /// Each is the runtime device's own id, not the one this device reports through
     /// [`Device::to_id`](burn_backend::Device::to_id), which encodes the dispatch variant into its
     /// type. A [`DeviceHandle`](burn_backend::DeviceHandle) opened with it shares the fusion
     /// server's queue, so a task submitted there runs between the operations registered before
-    /// and after it. An autodiff device answers for the device it wraps. A sharded compute device answers
-    /// `None`: each of its members has a fusion server of its own.
-    pub fn fusion_worker(&self) -> Option<DeviceId> {
+    /// and after it. An autodiff device answers for the device it wraps.
+    pub fn fusion_workers(&self) -> Vec<DeviceId> {
         match self {
             #[cfg(cube_backend)]
-            DispatchDevice::Cube(device) => burn_cubecl::FUSED.then(|| device.to_id()),
+            DispatchDevice::Cube(device) => burn_cubecl::FUSED
+                .then(|| device.to_id())
+                .into_iter()
+                .collect(),
+            #[cfg(all(cube_backend, feature = "shard"))]
+            DispatchDevice::ShardedCompute(device) => match burn_cubecl::FUSED {
+                true => device
+                    .members::<crate::backends::Cube>()
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|member| member.to_id())
+                    .collect(),
+                false => Vec::new(),
+            },
             #[cfg(feature = "autodiff")]
-            DispatchDevice::Autodiff(device) => device.inner.fusion_worker(),
+            DispatchDevice::Autodiff(device) => device.inner.fusion_workers(),
             #[allow(unreachable_patterns)]
-            _ => None,
+            _ => Vec::new(),
         }
     }
 

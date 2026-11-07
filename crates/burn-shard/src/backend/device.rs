@@ -4,11 +4,12 @@ use std::{
 };
 
 use burn_backend::{DType, DeviceId, DeviceOps, DeviceSettings, RouterDeviceType};
-use burn_ir::BackendIr;
-use burn_router::{get_client, register_scoped_client};
+use burn_ir::{BackendIr, HandleKind};
+use burn_router::{RouterTensor, get_client, register_scoped_client};
 use burn_std::{QuantConfig, device::Device};
 
-use super::{ShardClient, channel::ShardChannel, interpreter::ShardInterpreter};
+use super::{ShardClient, ShardCustomOps, channel::ShardChannel, interpreter::ShardInterpreter};
+use crate::{Shards, ShardsError};
 
 /// A sharded compute device of devices, its members, that a tensor's shards are spread over.
 ///
@@ -48,6 +49,13 @@ pub enum ShardError {
         /// Each member's quantization config, in member order.
         configs: Vec<QuantConfig>,
     },
+    /// The custom operations were registered for another backend than the members run.
+    CustomOpsBackend {
+        /// The backend the custom operations were registered for.
+        registry: String,
+        /// The backend the members run.
+        members: String,
+    },
 }
 
 /// A member of a sharded compute device: its device, and the settings it runs with.
@@ -81,39 +89,71 @@ impl ShardedComputeDevice {
                 settings: device.defaults(),
             })
             .collect();
-        Self::with_member_settings::<B>(&members)
+        Self::with_member_settings::<B>(&members, ShardCustomOps::default())
     }
 
-    /// A new sharded compute device whose `members` run `B`, each with its own settings. Each of the sharded compute device's
-    /// default dtypes is the first of the members' own, in member order, that every member
-    /// supports.
+    /// A new sharded compute device whose `members` run `B`, each with its own settings and with
+    /// `B`'s handlers in `custom_ops`. Each of its default dtypes is the first of the members' own,
+    /// in member order, that every member supports.
+    ///
+    /// A custom operation without a [rule](crate::CustomOpRule) gathers its inputs and runs whole
+    /// on every member.
     ///
     /// # Errors
     ///
-    /// When `members` is empty, when no member's default for a dtype runs on every member, or
-    /// when the members quantize differently.
+    /// When `members` is empty, when no member's default for a dtype runs on every member, when
+    /// the members quantize differently, or when `custom_ops` are another backend's.
     ///
     /// # Panics
     ///
     /// When the process already has 65,536 sharded compute devices.
     pub fn with_member_settings<B: BackendIr>(
         members: &[MemberDevice<B::Device>],
+        custom_ops: ShardCustomOps,
     ) -> Result<Self, ShardError> {
         if members.is_empty() {
             return Err(ShardError::NoDevices);
         }
-        let interpreter =
-            ShardInterpreter::<B>::new(members.iter().map(|it| it.device.clone()).collect());
+        let devices: Vec<B::Device> = members.iter().map(|it| it.device.clone()).collect();
+        let interpreter = ShardInterpreter::<B>::new(devices.clone(), custom_ops)?;
         let shared_settings = interpreter.default_settings(members)?;
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
         let device = Self {
             id: u16::try_from(id).expect("Fewer than 65536 sharded compute devices in one process"),
         };
-        let client = ShardClient::new(device, interpreter, shared_settings);
+        let client = ShardClient::new(device, interpreter, shared_settings, devices);
         register_scoped_client::<ShardChannel>(&device, client)
             .expect("A new sharded compute device's device has no client yet")
             .keep();
         Ok(device)
+    }
+
+    /// The devices of its members, in member order, when they run `B`, or `None` when they run
+    /// another backend.
+    pub fn members<B: BackendIr>(&self) -> Option<Vec<B::Device>> {
+        get_client::<ShardChannel>(self).members::<B::Device>()
+    }
+
+    pub fn num_members(&self) -> usize {
+        get_client::<ShardChannel>(self).num_members()
+    }
+
+    /// The tensor `shards` make up: one shard per member, of the members' backend `B`, each
+    /// already on its member. Nothing moves between
+    /// members, and no member reads another's shard.
+    ///
+    /// # Errors
+    ///
+    /// When the members do not run `B`, when there is not one shard per member, when shard `i` is
+    /// not on member `i`'s device, when the shards differ in dtype, when a partial sum is not of
+    /// floats or ints, or when a shard's shape is not its member's part: the whole value when
+    /// replicated or a partial sum, and its balanced chunk of the split dim when split, a
+    /// quantized chunk holding whole quantization blocks.
+    pub fn join_shards<B: BackendIr>(
+        &self,
+        shards: Shards<HandleKind<B>>,
+    ) -> Result<RouterTensor<ShardClient>, ShardsError> {
+        get_client::<ShardChannel>(self).join_shards(shards)
     }
 }
 
@@ -145,6 +185,11 @@ impl fmt::Display for ShardError {
             Self::MixedQuantization { configs } => write!(
                 f,
                 "A sharded compute device's members quantize the same way, not as {configs:?}"
+            ),
+            Self::CustomOpsBackend { registry, members } => write!(
+                f,
+                "The custom operations are registered for {registry}, and the members run \
+                 {members}"
             ),
         }
     }
